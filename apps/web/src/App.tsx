@@ -31,7 +31,10 @@ export default function App() {
     [retrying, setRetrying] = useState(false);
   const session = useQuery({
     queryKey: ['session'],
-    queryFn: () => request('/session', { method: 'POST' }),
+    queryFn: async () => {
+      await request('/session', { method: 'POST' });
+      return true;
+    },
     staleTime: Infinity,
     retry: 1,
   });

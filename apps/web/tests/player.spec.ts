@@ -74,16 +74,13 @@ test('a mobile user navigates original video and disables auto-skip by dragging'
           body: media.subarray(start, end + 1),
         });
       } else await route.fulfill({ contentType: 'video/mp4', body: media });
-    } else if (path.endsWith('/poster') || path.includes('/thumbnail'))
+    } else if (path.endsWith('/session')) await route.fulfill({ status: 204 });
+    else if (path.endsWith('/poster') || path.includes('/thumbnail'))
       await route.fulfill({ status: 204 });
     else if (path.endsWith('/events')) await route.fulfill({ status: 204 });
     else
       await route.fulfill({
-        json: path.endsWith('/session')
-          ? {}
-          : path.endsWith('/videos')
-            ? { items: [video] }
-            : video,
+        json: path.endsWith('/videos') ? { items: [video] } : video,
       });
   });
   await page.goto('/?video=video');
