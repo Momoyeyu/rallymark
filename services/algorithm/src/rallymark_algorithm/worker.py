@@ -69,11 +69,21 @@ def execute(job, settings, sessions, worker_id, connection):
                 current.lease_until = None
                 current.worker_id = None
         logger.info("job_completed", extra={"job_id": job.id, "elapsed_seconds": time.monotonic() - began})
-    except Exception as error:  # noqa: BLE001 - isolate each job and loss of lease
+    except Exception as error:
         code = error.code if isinstance(error, AnalysisFailure) else "analysis_failed"
         retryable = isinstance(error, AnalysisFailure) and error.retryable
         message = str(error) if isinstance(error, AnalysisFailure) else "Analysis failed; consult task log"
-        logger.error("job_failed", extra={"job_id": job.id, "error_code": code, "attempt": job.attempt})
+        logger.error(
+            "job_failed",
+            extra={
+                "job_id": job.id,
+                "video_id": job.video_id,
+                "algorithm_version": job.algorithm_version,
+                "error_code": code,
+                "attempt": job.attempt,
+            },
+            exc_info=not isinstance(error, AnalysisFailure),
+        )
         with sessions.begin() as session:
             current = session.get(Job, job.id)
             if current.worker_id == worker_id and current.attempt == job.attempt:

@@ -38,6 +38,7 @@ def load_env():
 
 
 def compose(*args, capture=False, binary=False):
+    os.environ.setdefault("DOCKER_BUILDKIT", "1")
     files = ["-f", ROOT / "deploy/compose.yaml"]
     if os.environ.get("RALLYMARK_MODE") == "dev":
         files += ["-f", ROOT / "deploy/compose.dev.yaml"]

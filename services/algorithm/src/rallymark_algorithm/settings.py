@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -78,10 +79,27 @@ def config_hash(config):
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
-        entry = {"level": record.levelname, "service": "algorithm", "event": record.getMessage()}
-        for key in ("job_id", "stage", "request_id", "attempt", "elapsed_seconds", "error_code"):
+        entry = {
+            "time": datetime.now(UTC).isoformat(),
+            "level": record.levelname,
+            "service": "algorithm",
+            "event": record.getMessage(),
+        }
+        for key in (
+            "job_id",
+            "video_id",
+            "algorithm_version",
+            "config_hash",
+            "stage",
+            "request_id",
+            "attempt",
+            "elapsed_seconds",
+            "error_code",
+        ):
             if hasattr(record, key):
                 entry[key] = getattr(record, key)
+        if record.exc_info:
+            entry["exception"] = self.formatException(record.exc_info)
         return json.dumps(entry)
 
 
