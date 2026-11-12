@@ -1,0 +1,19 @@
+application:
+  max_upload_bytes: 500000000
+  max_duration_seconds: 900
+  retention_days: 7
+  session_cookie_secure: false
+  poll_seconds: 2
+algorithm:
+  version: ftt-540cc9f
+  tad_top_k: 200
+  nearby_seconds: 5
+  ocr_crop: '540:120:85:915'
+  ocr_width: 1920
+  ocr_height: 1080
+  timeout_seconds: 2700
+  lease_seconds: 60
+  max_attempts: 2
+  runner: real
+logging:
+  level: INFO

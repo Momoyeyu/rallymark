@@ -1,0 +1,20 @@
+services:
+  api:
+    volumes:
+      - media:/data/media
+      - ./config.dev.yaml:/app/config.yaml:ro
+  algorithm:
+    environment:
+      ENVIRONMENT: development
+    volumes:
+      - algorithm-work:/data/work
+      - ./config.dev.yaml:/app/config.yaml:ro
+  algorithm-worker:
+    environment:
+      ENVIRONMENT: development
+    image: ${REGISTRY}/algorithm-api:${VERSION}
+    build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: api}
+    volumes: !override
+      - algorithm-work:/data/work
+      - ./config.dev.yaml:/app/config.yaml:ro
+    deploy: !reset {}

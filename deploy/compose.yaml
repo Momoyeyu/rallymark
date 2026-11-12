@@ -1,0 +1,97 @@
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '3'}
+x-algorithm-env: &algorithm-env
+  DATABASE_URL: postgresql+psycopg://algorithm:${ALGORITHM_DB_PASSWORD:?required}@postgres:5432/rallymark
+  CONFIG_PATH: /app/config.yaml
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:?required}
+  BUSINESS_INTERNAL_URL: http://api:8000
+  WORK_ROOT: /data/work
+  WEIGHTS_ROOT: /models
+services:
+  postgres:
+    <<: *common
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: rallymark
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      BUSINESS_DB_PASSWORD: ${BUSINESS_DB_PASSWORD:?required}
+      ALGORITHM_DB_PASSWORD: ${ALGORITHM_DB_PASSWORD:?required}
+    volumes:
+      - database:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d rallymark]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    <<: *common
+    image: ${REGISTRY:?required}/api:${VERSION:?required}
+    build: {context: .., dockerfile: deploy/Dockerfile.api}
+    environment:
+      DATABASE_URL: postgresql+psycopg://business:${BUSINESS_DB_PASSWORD:?required}@postgres:5432/rallymark
+      CONFIG_PATH: /app/config.yaml
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?required}
+      ALGORITHM_URL: http://algorithm:8001
+      MEDIA_ROOT: /data/media
+    volumes:
+      - media:/data/media
+      - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
+    depends_on: {postgres: {condition: service_healthy}}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  algorithm:
+    <<: *common
+    image: ${REGISTRY:?required}/algorithm-api:${VERSION:?required}
+    build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: api}
+    environment: *algorithm-env
+    volumes:
+      - algorithm-work:/data/work
+      - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
+    depends_on: {postgres: {condition: service_healthy}}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  algorithm-worker:
+    <<: *common
+    image: ${REGISTRY:?required}/algorithm-worker:${VERSION:?required}
+    build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: worker}
+    command: [python, -m, rallymark_algorithm.worker]
+    environment: *algorithm-env
+    shm_size: 2gb
+    volumes:
+      - algorithm-work:/data/work
+      - ${WEIGHTS_PATH:?required}:/models:ro
+      - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
+    depends_on: {postgres: {condition: service_healthy}}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${GPU_DEVICE:?required}']
+              capabilities: [gpu]
+  web:
+    <<: *common
+    image: ${REGISTRY:?required}/web:${VERSION:?required}
+    build: {context: .., dockerfile: deploy/Dockerfile.web}
+    ports: ['${BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-8080}:8080']
+    depends_on: {api: {condition: service_started}}
+    healthcheck:
+      test: [CMD-SHELL, wget -q -O /dev/null http://127.0.0.1:8080/health/live]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+volumes:
+  database:
+  media:
+  algorithm-work:

@@ -1,0 +1,83 @@
+import uuid
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from rallymark_algorithm.app import create_app
+from rallymark_algorithm.models import Base
+from rallymark_algorithm.settings import Settings
+
+
+@pytest.fixture
+def client(tmp_path):
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        execution_options={"schema_translate_map": {"algorithm": None}},
+    )
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(engine, expire_on_commit=False)
+    settings = Settings(
+        database_url="sqlite://", internal_token="test-service-token", ftt_root=Path("."), environment="test"
+    )
+    with TestClient(create_app(settings, sessions)) as client:
+        yield client
+
+
+def payload():
+    return {
+        "id": str(uuid.uuid4()),
+        "video_id": str(uuid.uuid4()),
+        "sha256": "a" * 64,
+        "config": {},
+        "config_hash": "b" * 64,
+        "algorithm_version": "ftt-540cc9f",
+    }
+
+
+def test_service_auth_and_idempotent_identity(client):
+    data = payload()
+    assert client.post("/internal/v1/jobs", json=data).status_code == 401
+    headers = {"Authorization": "Bearer test-service-token"}
+    first = client.post("/internal/v1/jobs", json=data, headers=headers)
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "queued"
+    assert client.post("/internal/v1/jobs", json=data, headers=headers).json() == first.json()
+    data["config"] = {"tad_top_k": 30}
+    assert client.post("/internal/v1/jobs", json=data, headers=headers).status_code == 409
+    assert client.get("/internal/v1/jobs/" + data["id"], headers=headers).json()["attempt"] == 0
+
+
+def test_invalid_config_and_missing_job(client):
+    headers = {"Authorization": "Bearer test-service-token"}
+    data = payload()
+    data["config"] = {"tad_top_k": 201}
+    assert client.post("/internal/v1/jobs", json=data, headers=headers).status_code == 422
+    assert client.get("/internal/v1/jobs/" + str(uuid.uuid4()), headers=headers).status_code == 404
+    assert client.get("/health/ready").status_code == 503
+
+
+def test_fake_cannot_start_in_production():
+    with pytest.raises(ValueError):
+        Settings(
+            database_url="sqlite://",
+            internal_token="test-service-token",
+            ftt_root=Path("."),
+            algorithm={"runner": "fake"},
+        )
+
+
+def test_api_requires_compatible_algorithm_version(client):
+    data = payload()
+    data["algorithm_version"] = "unknown"
+    assert (
+        client.post(
+            "/internal/v1/jobs", json=data, headers={"Authorization": "Bearer test-service-token"}
+        ).status_code
+        == 409
+    )

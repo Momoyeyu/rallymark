@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""Operator commands shared by Makefile and deployment automation."""
+
+import json
+import os
+import secrets
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNTIME = ROOT / ".runtime"
+ENV = ROOT / (os.environ.get("ENV_FILE") or ".runtime/deploy.env")
+
+
+def run(args, *, capture=False, input=None):
+    return subprocess.run(
+        [str(x) for x in args],
+        cwd=ROOT,
+        check=True,
+        text=input is None or isinstance(input, str),
+        input=input,
+        stdout=subprocess.PIPE if capture else None,
+    ).stdout
+
+
+def load_env():
+    if not ENV.is_file():
+        raise RuntimeError("Run make setup first, then edit .runtime/deploy.env")
+    for line in ENV.read_text().splitlines():
+        if line.strip() and not line.lstrip().startswith("#"):
+            key, value = line.split("=", 1)
+            if not os.environ.get(key):
+                os.environ[key] = value.strip()
+
+
+def compose(*args, capture=False):
+    files = ["-f", ROOT / "deploy/compose.yaml"]
+    if os.environ.get("RALLYMARK_MODE") == "dev":
+        files += ["-f", ROOT / "deploy/compose.dev.yaml"]
+    return run(
+        [
+            "docker",
+            "compose",
+            "--project-name",
+            "rallymark-dev"
+            if os.environ.get("RALLYMARK_MODE") == "dev"
+            else "rallymark",
+            "--env-file",
+            ENV,
+            *files,
+            *args,
+        ],
+        capture=capture,
+    )
+
+
+def business(*args, capture=False):
+    return compose(
+        "exec", "-T", "api", "python", "-m", "rallymark_api.ops", *args, capture=capture
+    )
+
+
+def setup():
+    RUNTIME.mkdir(mode=0o700, exist_ok=True)
+    if ENV.exists():
+        print("Existing environment retained:", ENV)
+        return
+    template = (ROOT / "deploy/.env.example").read_text()
+    template = template.replace("generated-by-make-setup", "{}")
+    template = template.format(*[secrets.token_hex(24) for _ in range(4)])
+    ENV.write_text(template)
+    ENV.chmod(0o600)
+    print(
+        "Created",
+        ENV,
+        "with unique credentials. Set REGISTRY and WEIGHTS_PATH before deploying.",
+    )
+
+
+def migrate():
+    compose("up", "-d", "--wait", "postgres")
+    for service, package in [
+        ("api", "rallymark_api"),
+        ("algorithm", "rallymark_algorithm"),
+    ]:
+        compose(
+            "run", "--rm", "--no-deps", service, "python", "-m", package + ".migrate"
+        )
+
+
+def drain():
+    if not compose("ps", "-q", "api", capture=True).strip():
+        return
+    business("drain")
+    deadline = time.monotonic() + 3000
+    while time.monotonic() < deadline:
+        status = json.loads(business("status", capture=True))
+        if status["running"] == 0:
+            return
+        time.sleep(2)
+    raise RuntimeError("Tasks did not drain in 50 minutes; deployment stopped")
+
+
+def deploy(version, *, pull=True):
+    if not version:
+        raise RuntimeError("Specify VERSION=<immutable image tag>")
+    previous_file = RUNTIME / "current-version"
+    previous = previous_file.read_text().strip() if previous_file.exists() else None
+    os.environ["VERSION"] = version
+    compose("config", "--quiet")
+    if pull:
+        compose("pull")
+    else:
+        compose("build")
+    drain()
+    try:
+        migrate()
+        compose("up", "-d", "--wait", "--wait-timeout", "180")
+        business("undrain")
+    except Exception:
+        if previous and previous != version:
+            os.environ["VERSION"] = previous
+            compose("up", "-d", "--wait", "--wait-timeout", "180")
+            business("undrain")
+            print("Previous application version restored:", previous, file=sys.stderr)
+        raise
+    previous_file.parent.mkdir(mode=0o700, exist_ok=True)
+    if previous:
+        (RUNTIME / "previous-version").write_text(previous + "\n")
+    previous_file.write_text(version + "\n")
+    print("Deployed", version)
+
+
+def config_check():
+    compose("config", "--quiet")
+    compose(
+        "run",
+        "--rm",
+        "--no-deps",
+        "api",
+        "python",
+        "-m",
+        "rallymark_api.ops",
+        "config-check",
+    )
+
+
+def backup():
+    target = ROOT / "backups" / time.strftime("%Y%m%d-%H%M%S")
+    target.mkdir(parents=True, mode=0o700)
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--project-name",
+            "rallymark",
+            "--env-file",
+            str(ENV),
+            "-f",
+            str(ROOT / "deploy/compose.yaml"),
+            "exec",
+            "-T",
+            "postgres",
+            "pg_dump",
+            "-U",
+            "postgres",
+            "-d",
+            "rallymark",
+            "-Fc",
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        cwd=ROOT,
+    )
+    (target / "database.dump").write_bytes(result.stdout)
+    shutil.copy2(ENV, target / "deploy.env")
+    config = Path(os.environ.get("CONFIG_FILE") or ROOT / "deploy/config.yaml")
+    if not config.is_absolute():
+        config = ROOT / "deploy" / config
+    shutil.copy2(config, target / "config.yaml")
+    if (RUNTIME / "current-version").exists():
+        shutil.copy2(RUNTIME / "current-version", target / "version")
+    for file in target.iterdir():
+        file.chmod(0o600)
+    print(target)
+
+
+def restore():
+    source = Path(os.environ.get("BACKUP", "")).resolve()
+    if not (source / "database.dump").is_file():
+        raise RuntimeError(
+            "BACKUP must name a backup directory containing database.dump"
+        )
+    drain()
+    compose("stop", "api", "algorithm", "algorithm-worker")
+    container = compose("ps", "-q", "postgres", capture=True).strip()
+    if not container:
+        raise RuntimeError("PostgreSQL must be running")
+    run(
+        [
+            "docker",
+            "exec",
+            "-i",
+            container,
+            "pg_restore",
+            "-U",
+            "postgres",
+            "-d",
+            "rallymark",
+            "--clean",
+            "--if-exists",
+            "--exit-on-error",
+        ],
+        input=(source / "database.dump").read_bytes(),
+    )
+    config = ROOT / "deploy/config.yaml"
+    shutil.copy2(source / "config.yaml", config)
+    compose("up", "-d", "--wait", "--wait-timeout", "180")
+    business("undrain")
+    print("Restored database/configuration. Media volumes were retained.")
+
+
+def main():
+    action = sys.argv[1] if len(sys.argv) > 1 else "help"
+    if action == "help":
+        print(
+            "setup dev check test build deploy rollback status logs doctor config-edit config-check config-apply data-clean smoke smoke-gpu backup restore sync"
+        )
+        print(
+            "deploy/rollback VERSION=tag; logs SERVICE=api; data-clean [VIDEO_ID=id] [APPLY=1]; restore BACKUP=directory"
+        )
+        return
+    if action == "setup":
+        setup()
+        return
+    if action == "sync":
+        run(["git", "push", "origin", "HEAD"])
+        run(["git", "push", "github", "HEAD"])
+        return
+    requested_version = os.environ.get("VERSION")
+    load_env()
+    current = RUNTIME / "current-version"
+    os.environ["VERSION"] = requested_version or (
+        current.read_text().strip()
+        if current.exists()
+        else os.environ.get("VERSION") or "local"
+    )
+    if action == "dev":
+        os.environ["RALLYMARK_MODE"] = "dev"
+        os.environ["VERSION"] = "local"
+        deploy("local", pull=False)
+    elif action == "build":
+        os.environ["VERSION"] = (
+            requested_version or run(["git", "rev-parse", "HEAD"], capture=True).strip()
+        )
+        compose("build")
+    elif action in ("deploy", "rollback"):
+        version = requested_version
+        if action == "rollback" and not version:
+            version = (RUNTIME / "previous-version").read_text().strip()
+        deploy(version, pull=os.environ.get("LOCAL_BUILD") != "1")
+    elif action == "status":
+        compose("ps")
+        business("status")
+    elif action == "logs":
+        compose("logs", "--follow", "--tail", "200", os.environ.get("SERVICE") or "api")
+    elif action == "doctor":
+        run(["docker", "version"])
+        run(["docker", "compose", "version"])
+        compose("config", "--quiet")
+        if os.environ.get("GPU_DEVICE"):
+            run(["nvidia-smi", "--query-gpu=name,uuid,memory.used", "--format=csv"])
+        print("Free disk bytes:", shutil.disk_usage(ROOT).free)
+    elif action == "config-edit":
+        run([*shlex.split(os.environ.get("EDITOR", "vi")), ROOT / "deploy/config.yaml"])
+    elif action == "config-check":
+        config_check()
+    elif action == "config-apply":
+        config_check()
+        drain()
+        compose(
+            "up",
+            "-d",
+            "--force-recreate",
+            "--wait",
+            "api",
+            "algorithm",
+            "algorithm-worker",
+        )
+        business("undrain")
+    elif action == "data-clean":
+        args = ["cleanup"]
+        if os.environ.get("VIDEO_ID"):
+            args += ["--video-id", os.environ["VIDEO_ID"]]
+        if os.environ.get("APPLY") == "1":
+            args.append("--apply")
+        business(*args)
+        compose(
+            "exec", "-T", "algorithm", "python", "-m", "rallymark_algorithm.ops", *args
+        )
+    elif action == "backup":
+        backup()
+    elif action == "restore":
+        restore()
+    else:
+        raise RuntimeError("Unknown operation: " + action)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (RuntimeError, subprocess.CalledProcessError) as error:
+        print("Operation failed:", error, file=sys.stderr)
+        sys.exit(1)

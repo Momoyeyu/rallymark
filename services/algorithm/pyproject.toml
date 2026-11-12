@@ -1,0 +1,30 @@
+[project]
+name = "rallymark-algorithm"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "fastapi>=0.115,<1", "uvicorn>=0.30,<1", "sqlalchemy>=2,<3",
+  "psycopg[binary]>=3.2,<4", "httpx>=0.27,<1", "pyyaml>=6,<7",
+  "pydantic>=2.9,<3", "prometheus-client>=0.21,<1",
+]
+[project.optional-dependencies]
+gpu = [
+  "torch==2.0.1", "torchvision==0.15.2", "numpy==1.23.5", "mmengine==0.10.7",
+  "mmaction2==1.1.0", "mmcv-lite==2.0.1", "decord==0.6.0",
+  "rapidocr-onnxruntime==1.4.4", "onnx", "onnxruntime<1.32", "opencv-python<4.12",
+  "scipy<1.16", "einops", "pandas<2.4", "tqdm", "imgaug", "pytorchvideo",
+  "wandb", "gdown==5.2.2", "ninja", "setuptools<70", "wheel",
+]
+[dependency-groups]
+dev = ["pytest>=8,<9", "ruff>=0.9,<1"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+[tool.hatch.build.targets.wheel]
+packages = ["src/rallymark_algorithm"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+exclude = ["vendor"]

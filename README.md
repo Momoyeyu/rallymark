@@ -1,40 +1,33 @@
 # RallyMark
 
-乒乓球比赛视频回合标记与复盘工具。识别比赛中的回合，记录起止时间，让用户按回合跳转观看。
+RallyMark identifies rallies in table-tennis match videos and lets viewers jump between them while playing the original video. The interface prioritizes mobile screens and requires no login.
 
-## 基本思想
+## First release
 
-- 在原视频时间轴上标记回合，按顺序提供回合导航和跳转。
-- 播放原视频，通过时间标记减少复盘时查找回合的操作，省去剪辑重新编码的等待。
-- 支持自由拖动时间轴，识别遗漏或边界偏差时，可以直接查看前后内容。
-- 前端以手机端适配为高优先级，同时支持桌面端使用。
-- 采用 monorepo 管理前端、业务后端和算法服务，各部分可以独立部署。
+Upload an MP4/H.264 video up to 500 MB and 15 minutes, wait for analysis, then review rally markers. Previous/next buttons seek and play in one action. Automatic skipping is enabled by default, pauses after the final rally, and turns off when the viewer manually scrubs. The same browser retains anonymous history for seven days.
 
-## 算法路线
+TAD is the primary detector. Scoreboard OCR assists boundaries where the supported broadcast layout is recognized; other layouts receive a TAD-only result with a warning. Algorithm parameters live in deployment YAML, not user-facing controls. Experimental tuning continues in the independent FTT demo repository.
 
-- TAD 作为主要回合检测方法，输出候选区间与置信度。
-- 比分 OCR 作为辅助，提供起止时间线索，辅助判断相邻小片段是否属于同一回合。
-- 在实验 demo 中继续迭代后处理，重点处理需要融合的小片段，并评估融合后的边界与回合覆盖情况。
+## Development
 
-## 项目组成
+~~~sh
+make setup
+make dev
+make check
+make test
+~~~
 
-- 前端负责视频提交、分析进度、时间标记、回合跳转与原视频播放。
-- 后端负责面向用户的 API、分析任务和业务逻辑，通过内部 API 调用算法服务。
-- 算法服务封装 GPU 推理与后处理，输出结构化回合标记，支持独立部署与后续扩容。
+The development Compose stack uses a fake algorithm runner. It requires Docker Compose 2.24.4 or newer. Run make help for commands. Use make deploy VERSION=<commit-sha> LOCAL_BUILD=1 on a host without a configured image registry. Follow [operations](docs/operations.md) for real GPU deployment, configuration, cleanup, backup and rollback.
 
-## 算法来源
+## Structure
 
-基于 FTT dual-adapter TAD 与比分 OCR 实验 demo 开发。该 demo 包含实验代码、模型权重和样例数据，由算法侧单独维护。产品项目后续按需复用和封装其中的实现，并记录来源版本。
+| Directory | Responsibility |
+| --- | --- |
+| apps/web | React, TypeScript and mobile playback |
+| services/api | FastAPI sessions, uploads, tasks and media |
+| services/algorithm | Internal FastAPI job API, GPU worker and algorithm adapter |
+| contracts | API schema and generated client types |
+| deploy | Docker images, Compose and configuration |
+| scripts | Shared development and operator commands |
 
-[ModelScope 实验 demo](https://www.modelscope.ai/models/yubodata/ftt-dual-adapter-tad-ocr-15raw)
-
-## 当前状态
-
-项目处于准备阶段，尚未实现前端、后端或算法服务。实验 demo 仍在调整，具体技术选型、接口与部署方案待后续确定。默认分支为 `master`。
-
-## 待办
-
-- [ ] 迭代 TAD 与比分 OCR 的组合及片段融合后处理。
-- [ ] 确定回合标记的数据格式和可封装的算法版本。
-- [ ] 设计移动端优先的视频播放与回合导航流程。
-- [ ] 确定前端、业务后端与算法服务的实现方案。
+See [architecture](docs/architecture.md) for service and persistence boundaries. [AGENTS.md](AGENTS.md) summarizes repository conventions. GitLab is the primary internal repository; GitHub is a private auxiliary remote. The default branch is master.
