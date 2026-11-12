@@ -16,12 +16,12 @@ RUNTIME = ROOT / ".runtime"
 ENV = ROOT / (os.environ.get("ENV_FILE") or ".runtime/deploy.env")
 
 
-def run(args, *, capture=False, input=None):
+def run(args, *, capture=False, input=None, binary=False):
     return subprocess.run(
         [str(x) for x in args],
         cwd=ROOT,
         check=True,
-        text=input is None or isinstance(input, str),
+        text=not binary and (input is None or isinstance(input, str)),
         input=input,
         stdout=subprocess.PIPE if capture else None,
     ).stdout
@@ -37,7 +37,7 @@ def load_env():
                 os.environ[key] = value.strip()
 
 
-def compose(*args, capture=False):
+def compose(*args, capture=False, binary=False):
     files = ["-f", ROOT / "deploy/compose.yaml"]
     if os.environ.get("RALLYMARK_MODE") == "dev":
         files += ["-f", ROOT / "deploy/compose.dev.yaml"]
@@ -55,6 +55,7 @@ def compose(*args, capture=False):
             *args,
         ],
         capture=capture,
+        binary=binary,
     )
 
 
@@ -105,10 +106,14 @@ def drain():
     raise RuntimeError("Tasks did not drain in 50 minutes; deployment stopped")
 
 
+def version_directory():
+    return RUNTIME / "dev" if os.environ.get("RALLYMARK_MODE") == "dev" else RUNTIME
+
+
 def deploy(version, *, build=False, pull=False):
     if not version:
         raise RuntimeError("Specify VERSION=<immutable image tag>")
-    previous_file = RUNTIME / "current-version"
+    previous_file = version_directory() / "current-version"
     previous = previous_file.read_text().strip() if previous_file.exists() else None
     os.environ["VERSION"] = version
     compose("config", "--quiet")
@@ -137,7 +142,7 @@ def deploy(version, *, build=False, pull=False):
         raise
     previous_file.parent.mkdir(mode=0o700, exist_ok=True)
     if previous:
-        (RUNTIME / "previous-version").write_text(previous + "\n")
+        (version_directory() / "previous-version").write_text(previous + "\n")
     previous_file.write_text(version + "\n")
     print("Deployed", version)
 
@@ -157,6 +162,8 @@ def config_check():
 
 
 def configured_path():
+    if os.environ.get("RALLYMARK_MODE") == "dev":
+        return ROOT / "deploy/config.dev.yaml"
     path = Path(os.environ.get("CONFIG_FILE") or "./config.yaml")
     return path if path.is_absolute() else ROOT / "deploy" / path
 
@@ -164,36 +171,25 @@ def configured_path():
 def backup():
     target = ROOT / "backups" / time.strftime("%Y%m%d-%H%M%S")
     target.mkdir(parents=True, mode=0o700)
-    result = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "--project-name",
-            "rallymark",
-            "--env-file",
-            str(ENV),
-            "-f",
-            str(ROOT / "deploy/compose.yaml"),
-            "exec",
-            "-T",
-            "postgres",
-            "pg_dump",
-            "-U",
-            "postgres",
-            "-d",
-            "rallymark",
-            "-Fc",
-        ],
-        check=True,
-        stdout=subprocess.PIPE,
-        cwd=ROOT,
+    result = compose(
+        "exec",
+        "-T",
+        "postgres",
+        "pg_dump",
+        "-U",
+        "postgres",
+        "-d",
+        "rallymark",
+        "-Fc",
+        capture=True,
+        binary=True,
     )
-    (target / "database.dump").write_bytes(result.stdout)
+    (target / "database.dump").write_bytes(result)
     shutil.copy2(ENV, target / "deploy.env")
     config = configured_path()
     shutil.copy2(config, target / "config.yaml")
-    if (RUNTIME / "current-version").exists():
-        shutil.copy2(RUNTIME / "current-version", target / "version")
+    if (version_directory() / "current-version").exists():
+        shutil.copy2(version_directory() / "current-version", target / "version")
     for file in target.iterdir():
         file.chmod(0o600)
     print(target)
@@ -205,11 +201,13 @@ def restore():
         raise RuntimeError(
             "BACKUP must name a backup directory containing database.dump"
         )
+    for name in ("config.yaml", "deploy.env", "version"):
+        if not (source / name).is_file():
+            raise RuntimeError("Backup is incomplete: missing " + name)
+    database_dump = (source / "database.dump").read_bytes()
+    restored_config = (source / "config.yaml").read_bytes()
+    deployment_environment = (source / "deploy.env").read_text()
     version_file = source / "version"
-    if not version_file.is_file():
-        raise RuntimeError(
-            "Backup has no recorded application version; restore stopped"
-        )
     restore_version = version_file.read_text().strip()
     if not restore_version:
         raise RuntimeError("Backup application version is empty")
@@ -224,7 +222,7 @@ def restore():
         )
     os.environ["VERSION"] = previous_version
     backup_env = {}
-    for line in (source / "deploy.env").read_text().splitlines():
+    for line in deployment_environment.splitlines():
         if line and not line.startswith("#") and "=" in line:
             key, value = line.split("=", 1)
             backup_env[key] = value
@@ -252,14 +250,16 @@ def restore():
             "--clean",
             "--if-exists",
             "--exit-on-error",
+            "--single-transaction",
         ],
-        input=(source / "database.dump").read_bytes(),
+        input=database_dump,
     )
     config = configured_path()
-    shutil.copy2(source / "config.yaml", config)
+    config.write_bytes(restored_config)
     os.environ["VERSION"] = restore_version
     compose("up", "-d", "--force-recreate", "--wait", "--wait-timeout", "180")
-    (RUNTIME / "current-version").write_text(restore_version + "\n")
+    version_directory().mkdir(parents=True, mode=0o700, exist_ok=True)
+    (version_directory() / "current-version").write_text(restore_version + "\n")
     business("undrain")
     print("Restored database/configuration. Media volumes were retained.")
 
@@ -283,7 +283,7 @@ def main():
         return
     requested_version = os.environ.get("VERSION")
     load_env()
-    current = RUNTIME / "current-version"
+    current = version_directory() / "current-version"
     os.environ["VERSION"] = requested_version or (
         current.read_text().strip()
         if current.exists()
@@ -301,8 +301,8 @@ def main():
     elif action in ("deploy", "rollback"):
         version = requested_version
         if action == "rollback" and not version:
-            version = (RUNTIME / "previous-version").read_text().strip()
-        local_build = os.environ.get("LOCAL_BUILD", "1") == "1"
+            version = (version_directory() / "previous-version").read_text().strip()
+        local_build = (os.environ.get("LOCAL_BUILD") or "1") == "1"
         deploy(
             version,
             build=action == "deploy" and local_build,

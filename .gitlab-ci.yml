@@ -1,6 +1,8 @@
 stages: [verify]
 variables:
   ENVIRONMENT: test
+  PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+  PIP_DEFAULT_TIMEOUT: '30'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
   UV_CACHE_DIR: $CI_PROJECT_DIR/.cache/uv
   UV_PYTHON_INSTALL_MIRROR: https://gh-proxy.org/https://github.com/astral-sh/python-build-standalone/releases/download
@@ -25,6 +27,7 @@ python:
     - sed -i "s@http://deb.debian.org/debian@https://mirrors.tuna.tsinghua.edu.cn/debian@g" /etc/apt/sources.list.d/debian.sources
     - apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=20 update && apt-get install -y --no-install-recommends ffmpeg
   script:
+    - python3 -m unittest discover -s tests -p "test_*.py"
     - cd services/api && uv sync --frozen && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
     - cd ../algorithm && uv sync --frozen && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
   cache:

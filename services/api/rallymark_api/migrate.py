@@ -9,8 +9,13 @@ from .db import Base, Maintenance, connect
 def migrate(engine):
     with engine.begin() as connection:
         if connection.dialect.name == "postgresql":
-            connection.execute(text("CREATE SCHEMA IF NOT EXISTS business"))
             connection.execute(text("SELECT pg_advisory_xact_lock(74217421)"))
+            exists = connection.scalar(
+                text("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = :schema)"),
+                {"schema": "business"},
+            )
+            if not exists:
+                connection.execute(text("CREATE SCHEMA business"))
             prefix = "business."
         else:
             prefix = ""

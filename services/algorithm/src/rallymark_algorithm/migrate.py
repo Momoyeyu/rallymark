@@ -10,7 +10,12 @@ from .settings import Settings
 def migrate(engine):
     with engine.begin() as connection:
         connection.execute(text("SELECT pg_advisory_xact_lock(74219860)"))
-        connection.execute(text("CREATE SCHEMA IF NOT EXISTS algorithm"))
+        exists = connection.scalar(
+            text("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = :schema)"),
+            {"schema": "algorithm"},
+        )
+        if not exists:
+            connection.execute(text("CREATE SCHEMA algorithm"))
         connection.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS algorithm.schema_migrations "

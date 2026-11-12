@@ -16,6 +16,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tests", action="store_true")
     args = parser.parse_args()
+    if args.tests:
+        run(
+            ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
+            ROOT,
+        )
     for service in ["api", "algorithm"]:
         directory = ROOT / "services" / service
         run(["uv", "sync", "--frozen"], directory)

@@ -25,7 +25,7 @@ make setup
 make dev
 ~~~
 
-The development override selects the fake runner, uses a separate Compose project, and does not request a GPU. It exercises upload, durable task processing and playback through the same API. make check and make test run the maintained validation commands. Production validation uses make smoke with BASE_URL pointing at a fake development deployment; make smoke-gpu additionally requires SMOKE_VIDEO pointing to the validated real sample.
+The development override selects the fake runner, uses a separate Compose project, and does not request a GPU. Development version records live under .runtime/dev/; production version records remain under .runtime/. For subsequent development operations, set RALLYMARK_MODE=dev. It exercises upload, durable task processing and playback through the same API. make check and make test run the maintained validation commands. Production validation uses make smoke with BASE_URL pointing at a fake development deployment; make smoke-gpu additionally requires SMOKE_VIDEO pointing to the validated real sample.
 
 ## Update and recovery
 
@@ -39,10 +39,12 @@ A changed model snapshot requires a real GPU smoke run before promotion. CI veri
 
 make data-clean previews expired business media and algorithm scratch data. Add APPLY=1 to execute, or VIDEO_ID=<uuid> to target a specific terminal video. The business cleanup command preserves ownership and task consistency and skips active work. Cleanup never removes the database, model weights or whole volumes.
 
-make backup stores a PostgreSQL archive, deployment configuration, environment file and current version under backups/. Backup directories contain credentials and are private. Media and model volumes are not duplicated by this operation; back them up independently if required. make restore BACKUP=backups/<timestamp> drains work, restores the database and configuration, then starts services again against the retained media volume. Restore expects the same database role names and matching credentials from the backup environment file. Test restore on a separate deployment before relying on it operationally.
+make backup stores a PostgreSQL archive, deployment configuration, environment file and current version under backups/. Backup directories contain credentials and are private. Media and model volumes are not duplicated by this operation; back them up independently if required. make restore BACKUP=backups/<timestamp> drains work, restores the database and configuration, then starts services again against the retained media volume. Restore checks backup completeness, database credentials and locally available images for the recorded version before stopping services. It restores PostgreSQL within one transaction, writes the backed-up YAML to the active CONFIG_FILE path, and starts the recorded application version. Restore expects the same database role names and matching credentials from the backup environment file. Test restore on a separate deployment before relying on it operationally.
 
 ## CI
 
 GitLab is the primary source and CI system. Merge requests and master run Python/frontend checks, PostgreSQL integration tests, contract drift checks and focused browser tests. CI currently neither builds images nor deploys. Makefile scripts build and deploy locally on the GPU machine. Registry publication can be added later without changing service boundaries. The project Docker runner is scoped to RallyMark.
 
 make sync pushes the current branch to origin (GitLab), then github (private auxiliary repository), failing if either push fails. It does not rewrite or delete remote history.
+
+The deployment host runs the project runner through the system service rallymark-gitlab-runner.service as sujunjie, with Docker group access. It starts at boot and restarts on failure. Check it with systemctl status rallymark-gitlab-runner and journalctl -u rallymark-gitlab-runner. Runner registration credentials stay in the user's private GitLab Runner configuration, outside this repository. Do not start a second nohup runner for the same registration.
