@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,22 @@ spec.loader.exec_module(ops)
 
 
 class OpsReview(unittest.TestCase):
+    def test_invalid_algorithm_configuration_does_not_drain(self):
+        def compose(*args, **kwargs):
+            if args[:4] == ("run", "--rm", "--no-deps", "algorithm"):
+                raise subprocess.CalledProcessError(1, args)
+
+        with (
+            patch.dict(os.environ, {"VERSION": "v2"}, clear=True),
+            patch.object(ops, "load_env"),
+            patch.object(ops, "compose", side_effect=compose),
+            patch.object(ops, "drain") as drain,
+            patch("sys.argv", ["manage.py", "config-apply"]),
+        ):
+            with self.assertRaises(subprocess.CalledProcessError):
+                ops.main()
+            drain.assert_not_called()
+
     def test_make_exported_empty_local_build_still_builds(self):
         with (
             patch.dict(os.environ, {"VERSION": "v2", "LOCAL_BUILD": ""}, clear=True),

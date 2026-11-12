@@ -36,6 +36,12 @@ python:
 web:
   stage: verify
   image: node:24-bookworm
+  variables:
+    PLAYWRIGHT_BROWSERS_PATH: $CI_PROJECT_DIR/.cache/ms-playwright
+  cache:
+    key:
+      files: [apps/web/pnpm-lock.yaml]
+    paths: [.cache/ms-playwright/]
   before_script:
     - sed -i "s@http://deb.debian.org/debian@https://mirrors.tuna.tsinghua.edu.cn/debian@g" /etc/apt/sources.list.d/debian.sources
     - apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=20 update && apt-get install -y --no-install-recommends python3 python3-pip ffmpeg
@@ -45,6 +51,6 @@ web:
     - cd apps/web
     - pnpm install --frozen-lockfile
     - pnpm check && pnpm test && pnpm build
-    - pnpm exec playwright install --with-deps chromium
+    - pnpm exec playwright install --with-deps --only-shell chromium
     - pnpm test:e2e
     - cd ../.. && uv sync --project services/api --frozen && python3 scripts/contracts.py --check

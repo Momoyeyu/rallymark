@@ -160,6 +160,11 @@ def config_check():
         "rallymark_api.ops",
         "config-check",
     )
+    compose(
+        "run", "--rm", "--no-deps", "algorithm", "python", "-c",
+        "from rallymark_algorithm.settings import Settings; "
+        "Settings.load(); print('Algorithm configuration valid')",
+    )
 
 
 def configured_path():
