@@ -19,7 +19,7 @@ workflow:
 python:
   stage: verify
   image: python:3.12-slim-bookworm
-  services: [postgres:17-alpine]
+  services: ['postgres:17-alpine']
   before_script:
     - pip install uv==0.13.7
     - apt-get update && apt-get install -y --no-install-recommends ffmpeg
@@ -46,7 +46,7 @@ web:
 images:
   stage: build
   image: docker:27-cli
-  services: [docker:27-dind]
+  services: ['docker:27-dind']
   variables:
     DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_CERTDIR: /certs
