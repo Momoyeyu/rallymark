@@ -8,7 +8,7 @@ from uuid import uuid4
 import httpx
 from sqlalchemy import or_, select
 
-from .db import ACTIVE, Analysis, Maintenance, Video, now
+from .db import ACTIVE, Analysis, Video, now
 
 logger = logging.getLogger("rallymark")
 
@@ -38,14 +38,11 @@ async def dispatch_once(factory, settings, config, client):
     token = str(uuid4())
     timestamp = now()
     with factory.begin() as db:
-        maintenance = db.get(Maintenance, 1)
         query = select(Analysis).where(
             Analysis.status.in_(ACTIVE),
             Analysis.next_poll_at <= timestamp,
             or_(Analysis.lease_until.is_(None), Analysis.lease_until < timestamp),
         )
-        if maintenance and maintenance.draining:
-            query = query.where(Analysis.submitted.is_(True))
         item = db.scalar(
             query.order_by(Analysis.next_poll_at).with_for_update(skip_locked=True).limit(1)
         )

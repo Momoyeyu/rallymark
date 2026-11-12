@@ -9,11 +9,12 @@ make setup
 make config-edit
 # Edit .runtime/deploy.env: REGISTRY, WEIGHTS_PATH, GPU_DEVICE and WEB_PORT.
 make doctor
-make config-check VERSION=<published-commit-sha>
-make deploy VERSION=<published-commit-sha>
+make build VERSION=<commit-sha>
+make config-check VERSION=<commit-sha>
+make deploy VERSION=<commit-sha>
 ~~~
 
-make setup generates unique credentials and leaves an existing file intact. Keep the environment file private. REGISTRY is the GitLab project's container registry image prefix, including its port when configured. The initial template uses the local prefix rallymark; replace it when the instance registry is enabled. If the instance has no registry yet, make deploy VERSION=<commit-sha> LOCAL_BUILD=1 builds all images directly on the deployment host before draining work. Authenticate to that registry with docker login before pulling. Use the API and algorithm database roles created by the PostgreSQL initialization script. Initialization runs once on a new database volume; changing a password in the environment file does not rotate an existing database role.
+make setup generates unique credentials and leaves an existing file intact. Keep the environment file private. REGISTRY is currently the local image-name prefix rallymark. make deploy VERSION=<commit-sha> builds images on the deployment host before draining work; make rollback reuses the recorded previous images without rebuilding them. When a registry becomes available, configure REGISTRY and use LOCAL_BUILD=0 to pull published images. Use the API and algorithm database roles created by the PostgreSQL initialization script. Initialization runs once on a new database volume; changing a password in the environment file does not rotate an existing database role.
 
 Weights are mounted read-only through WEIGHTS_PATH, which must contain the files recorded in services/algorithm/vendor/ftt/SHA256_MANIFEST.json. The initial host uses the 4090 UUID configured in deploy/.env.example. Only the frontend port is exposed. The first deployment is for the lab network/VPN and HTTP; set secure cookies and terminate HTTPS before using a public HTTPS endpoint.
 
@@ -28,11 +29,11 @@ The development override selects the fake runner, uses a separate Compose projec
 
 ## Update and recovery
 
-make deploy VERSION=... pulls immutable images, validates Compose, pauses new dispatch and waits for active work, runs versioned migrations and updates containers. If health checks fail, the previous recorded application version is restored. Schema migrations must remain backward-compatible because rollback does not run database downgrade operations. make rollback VERSION=... can explicitly select a previous version.
+make deploy VERSION=... builds versioned local images, validates Compose, rejects new analysis submissions and drains all existing queued and active work, runs versioned migrations and updates containers. If health checks fail, the previous recorded application version is restored. Schema migrations must remain backward-compatible because rollback does not run database downgrade operations. make rollback VERSION=... can explicitly select a previous version.
 
 make config-check validates YAML before deployment. make config-apply drains active work and recreates the API and algorithm services. New jobs receive the new configuration; existing jobs retain their snapshots. View service status with make status and correlated logs with make logs SERVICE=api or SERVICE=algorithm-worker.
 
-A changed model snapshot requires a real GPU smoke run before promotion. CI verifies CPU behavior and builds images, but a GPU inference test is a deployment check. Model weights are not part of container image layers or Git history.
+A changed model snapshot requires a real GPU smoke run before promotion. CI verifies CPU behavior, but a GPU inference test is a deployment check. Model weights are not part of container image layers or Git history.
 
 ## Data cleanup and backups
 
@@ -42,6 +43,6 @@ make backup stores a PostgreSQL archive, deployment configuration, environment f
 
 ## CI
 
-GitLab is the primary source and CI system. Merge requests run Python and frontend checks plus focused browser tests. master builds web, api, algorithm-api and algorithm-worker images tagged by commit SHA. The image job requires a Docker executor with privileged Docker-in-Docker and a reachable GitLab container registry; CI does not deploy automatically. Protected credentials must be configured by a GitLab maintainer where the registry requires them.
+GitLab is the primary source and CI system. Merge requests and master run Python/frontend checks, PostgreSQL integration tests, contract drift checks and focused browser tests. CI currently neither builds images nor deploys. Makefile scripts build and deploy locally on the GPU machine. Registry publication can be added later without changing service boundaries. The project Docker runner is scoped to RallyMark.
 
 make sync pushes the current branch to origin (GitLab), then github (private auxiliary repository), failing if either push fails. It does not rewrite or delete remote history.

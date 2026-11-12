@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from rallymark_api.app import create_app
 from rallymark_api.config import Settings
-from rallymark_api.db import Analysis, Video, connect, now
+from rallymark_api.db import Analysis, Maintenance, Video, connect, now
 from rallymark_api.dispatcher import dispatch_once
 from rallymark_api.migrate import migrate
 from rallymark_api.ops import cleanup
@@ -261,3 +261,106 @@ def test_probe_rejects_unsupported_video(monkeypatch, tmp_path, codec, audio, du
     )
     with pytest.raises(InvalidVideo):
         probe(tmp_path / "test.mp4", 900)
+
+
+def test_draining_upload_rejection_cleans_files_and_preserves_idempotency(context):
+    client, _, factory, settings = context
+    args = {
+        "files": {"file": ("match.mp4", b"video", "video/mp4")},
+        "headers": {"Idempotency-Key": "existing-upload"},
+    }
+    original = client.post("/api/v1/videos", **args).json()
+    with factory.begin() as db:
+        db.get(Maintenance, 1).draining = True
+    response = upload(client)
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "maintenance"
+    assert client.post("/api/v1/videos", **args).json()["id"] == original["id"]
+    assert list((settings.media_root / "temporary").iterdir()) == []
+    assert sorted(path.name for path in settings.media_root.glob("*.mp4")) == [
+        original["id"] + ".mp4"
+    ]
+    with factory() as db:
+        assert len(list(db.scalars(select(Video)))) == 1
+        assert len(list(db.scalars(select(Analysis)))) == 1
+
+
+def test_draining_rejects_new_retry_but_returns_existing_analysis(context):
+    client, _, factory, _ = context
+    video = upload(client).json()
+    identifier = video["latest_analysis"]["id"]
+    url = f"/api/v1/videos/{video['id']}/analyses"
+    with factory.begin() as db:
+        db.get(Maintenance, 1).draining = True
+    assert client.post(url).json()["id"] == identifier
+    with factory.begin() as db:
+        item = db.get(Analysis, identifier)
+        item.status = "failed"
+        item.idempotency_key = "existing-retry"
+    assert (
+        client.post(url, headers={"Idempotency-Key": "existing-retry"}).json()["id"] == identifier
+    )
+    response = client.post(url, headers={"Idempotency-Key": "new-retry"})
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "maintenance"
+    with factory() as db:
+        assert len(list(db.scalars(select(Analysis)))) == 1
+
+
+def test_draining_dispatches_queued_work_and_status_waits_for_completion(
+    context, monkeypatch, capsys
+):
+    import asyncio
+    import json
+    import sys
+    import rallymark_api.ops as ops
+
+    client, _, factory, settings = context
+    video = upload(client).json()
+    identifier = video["latest_analysis"]["id"]
+    with factory.begin() as db:
+        db.get(Maintenance, 1).draining = True
+    monkeypatch.setattr(ops, "Settings", lambda: settings)
+    monkeypatch.setattr(sys, "argv", ["ops", "status"])
+    ops.main()
+    assert json.loads(capsys.readouterr().out)["running"] == 1
+
+    async def run():
+        def handle(request):
+            return httpx.Response(
+                200,
+                json={
+                    "id": identifier,
+                    "status": "succeeded",
+                    "progress": None,
+                    "error": None,
+                    "result": {"rallies": [], "warnings": []},
+                },
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as remote:
+            return await dispatch_once(factory, settings, settings.load_config(), remote)
+
+    assert asyncio.run(run())
+    assert client.get(f"/api/v1/analyses/{identifier}").json()["status"] == "succeeded"
+    ops.main()
+    assert json.loads(capsys.readouterr().out)["running"] == 0
+
+
+def test_upload_checks_drain_after_video_validation(context):
+    _, app, factory, settings = context
+
+    def validation(path, maximum):
+        with factory.begin() as db:
+            db.get(Maintenance, 1).draining = True
+        return dict(duration_s=12, width=1920, height=1080)
+
+    uploading = create_app(settings, app.state.factory.kw["bind"], validation)
+    with TestClient(uploading) as browser:
+        browser.post("/api/v1/session")
+        response = upload(browser)
+    assert response.status_code == 503
+    assert not list(settings.media_root.glob("*.mp4"))
+    assert not list((settings.media_root / "temporary").iterdir())
+    with factory() as db:
+        assert list(db.scalars(select(Analysis))) == []

@@ -105,17 +105,24 @@ def drain():
     raise RuntimeError("Tasks did not drain in 50 minutes; deployment stopped")
 
 
-def deploy(version, *, pull=True):
+def deploy(version, *, build=False, pull=False):
     if not version:
         raise RuntimeError("Specify VERSION=<immutable image tag>")
     previous_file = RUNTIME / "current-version"
     previous = previous_file.read_text().strip() if previous_file.exists() else None
     os.environ["VERSION"] = version
     compose("config", "--quiet")
-    if pull:
+    if build:
+        compose("build")
+    elif pull:
         compose("pull")
     else:
-        compose("build")
+        rendered = json.loads(compose("config", "--format", "json", capture=True))
+        for name in ("api", "algorithm", "algorithm-worker", "web"):
+            run(
+                ["docker", "image", "inspect", rendered["services"][name]["image"]],
+                capture=True,
+            )
     drain()
     try:
         migrate()
@@ -149,6 +156,11 @@ def config_check():
     )
 
 
+def configured_path():
+    path = Path(os.environ.get("CONFIG_FILE") or "./config.yaml")
+    return path if path.is_absolute() else ROOT / "deploy" / path
+
+
 def backup():
     target = ROOT / "backups" / time.strftime("%Y%m%d-%H%M%S")
     target.mkdir(parents=True, mode=0o700)
@@ -178,9 +190,7 @@ def backup():
     )
     (target / "database.dump").write_bytes(result.stdout)
     shutil.copy2(ENV, target / "deploy.env")
-    config = Path(os.environ.get("CONFIG_FILE") or ROOT / "deploy/config.yaml")
-    if not config.is_absolute():
-        config = ROOT / "deploy" / config
+    config = configured_path()
     shutil.copy2(config, target / "config.yaml")
     if (RUNTIME / "current-version").exists():
         shutil.copy2(RUNTIME / "current-version", target / "version")
@@ -195,6 +205,34 @@ def restore():
         raise RuntimeError(
             "BACKUP must name a backup directory containing database.dump"
         )
+    version_file = source / "version"
+    if not version_file.is_file():
+        raise RuntimeError(
+            "Backup has no recorded application version; restore stopped"
+        )
+    restore_version = version_file.read_text().strip()
+    if not restore_version:
+        raise RuntimeError("Backup application version is empty")
+    # Resolve all requirements before stopping services or replacing the database.
+    previous_version = os.environ["VERSION"]
+    os.environ["VERSION"] = restore_version
+    rendered = json.loads(compose("config", "--format", "json", capture=True))
+    for name in ("api", "algorithm", "algorithm-worker", "web"):
+        run(
+            ["docker", "image", "inspect", rendered["services"][name]["image"]],
+            capture=True,
+        )
+    os.environ["VERSION"] = previous_version
+    backup_env = {}
+    for line in (source / "deploy.env").read_text().splitlines():
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            backup_env[key] = value
+    for key in ("POSTGRES_PASSWORD", "BUSINESS_DB_PASSWORD", "ALGORITHM_DB_PASSWORD"):
+        if backup_env.get(key) != os.environ.get(key):
+            raise RuntimeError(
+                "Database credentials changed since backup; reconcile credentials before restore"
+            )
     drain()
     compose("stop", "api", "algorithm", "algorithm-worker")
     container = compose("ps", "-q", "postgres", capture=True).strip()
@@ -217,9 +255,11 @@ def restore():
         ],
         input=(source / "database.dump").read_bytes(),
     )
-    config = ROOT / "deploy/config.yaml"
+    config = configured_path()
     shutil.copy2(source / "config.yaml", config)
-    compose("up", "-d", "--wait", "--wait-timeout", "180")
+    os.environ["VERSION"] = restore_version
+    compose("up", "-d", "--force-recreate", "--wait", "--wait-timeout", "180")
+    (RUNTIME / "current-version").write_text(restore_version + "\n")
     business("undrain")
     print("Restored database/configuration. Media volumes were retained.")
 
@@ -252,7 +292,7 @@ def main():
     if action == "dev":
         os.environ["RALLYMARK_MODE"] = "dev"
         os.environ["VERSION"] = "local"
-        deploy("local", pull=False)
+        deploy("local", build=True)
     elif action == "build":
         os.environ["VERSION"] = (
             requested_version or run(["git", "rev-parse", "HEAD"], capture=True).strip()
@@ -262,7 +302,12 @@ def main():
         version = requested_version
         if action == "rollback" and not version:
             version = (RUNTIME / "previous-version").read_text().strip()
-        deploy(version, pull=os.environ.get("LOCAL_BUILD") != "1")
+        local_build = os.environ.get("LOCAL_BUILD", "1") == "1"
+        deploy(
+            version,
+            build=action == "deploy" and local_build,
+            pull=action == "deploy" and not local_build,
+        )
     elif action == "status":
         compose("ps")
         business("status")
@@ -276,7 +321,7 @@ def main():
             run(["nvidia-smi", "--query-gpu=name,uuid,memory.used", "--format=csv"])
         print("Free disk bytes:", shutil.disk_usage(ROOT).free)
     elif action == "config-edit":
-        run([*shlex.split(os.environ.get("EDITOR", "vi")), ROOT / "deploy/config.yaml"])
+        run([*shlex.split(os.environ.get("EDITOR", "vi")), configured_path()])
     elif action == "config-check":
         config_check()
     elif action == "config-apply":

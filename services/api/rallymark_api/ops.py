@@ -79,7 +79,10 @@ def main():
         result = cleanup(factory, settings.media_root, args.apply, args.video_id)
     else:
         with factory.begin() as db:
-            item = db.get(Maintenance, 1)
+            query = select(Maintenance).where(Maintenance.id == 1)
+            if args.command in ("drain", "undrain"):
+                query = query.with_for_update()
+            item = db.scalar(query)
             if item is None:
                 raise SystemExit("Run migrations first")
             if args.command in ("drain", "undrain"):
@@ -93,7 +96,6 @@ def main():
                     select(func.count())
                     .select_from(Analysis)
                     .where(
-                        or_(Analysis.submitted.is_(True), Analysis.lease_until > now()),
                         Analysis.status.in_(ACTIVE),
                     )
                 ),

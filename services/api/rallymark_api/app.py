@@ -297,6 +297,13 @@ def create_app(settings=None, engine=None, probe_video=probe):
             raise ApiError(404, "not_found", "视频不存在或已过期。")
         return video
 
+    def admit_analysis(db):
+        maintenance = db.scalar(
+            select(Maintenance).where(Maintenance.id == 1).with_for_update(read=True)
+        )
+        if maintenance is None or maintenance.draining:
+            raise ApiError(503, "maintenance", "服务正在更新，请稍后重试。")
+
     def media_path(video):
         return settings.media_root / (video.id + ".mp4")
 
@@ -358,6 +365,17 @@ def create_app(settings=None, engine=None, probe_video=probe):
                 raise ApiError(422, "invalid_video", str(error)) from error
             os.replace(temp, final)
             with factory.begin() as db:
+                if idempotency_key:
+                    existing = db.scalar(
+                        select(Video).where(
+                            Video.owner == identity,
+                            Video.upload_key == idempotency_key,
+                            Video.deleting.is_(False),
+                        )
+                    )
+                    if existing:
+                        return video_json(db, existing)
+                admit_analysis(db)
                 video = Video(
                     id=identifier,
                     owner=identity,
@@ -452,6 +470,7 @@ def create_app(settings=None, engine=None, probe_video=probe):
                 or (idempotency_key and existing.idempotency_key == idempotency_key)
             ):
                 return analysis_json(existing)
+            admit_analysis(db)
             item = new_analysis(video, config, idempotency_key)
             db.add(item)
             db.flush()
