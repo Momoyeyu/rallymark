@@ -10,6 +10,7 @@ x-algorithm-env: &algorithm-env
   BUSINESS_INTERNAL_URL: http://api:8000
   WORK_ROOT: /data/work
   WEIGHTS_ROOT: /models
+  MIN_GPU_MEMORY_GIB: ${MIN_GPU_MEMORY_GIB:-12}
 services:
   postgres:
     <<: *common

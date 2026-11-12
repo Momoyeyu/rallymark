@@ -16,7 +16,25 @@ make deploy VERSION=<commit-sha>
 
 make setup generates unique credentials and leaves an existing file intact. Keep the environment file private. REGISTRY is currently the local image-name prefix rallymark. make deploy VERSION=<commit-sha> builds images on the deployment host before draining work; make rollback reuses the recorded previous images without rebuilding them. When a registry becomes available, configure REGISTRY and use LOCAL_BUILD=0 to pull published images. Use the API and algorithm database roles created by the PostgreSQL initialization script. Initialization runs once on a new database volume; changing a password in the environment file does not rotate an existing database role.
 
-Weights are mounted read-only through WEIGHTS_PATH, which must contain the files recorded in services/algorithm/vendor/ftt/SHA256_MANIFEST.json. The initial host uses the 4090 UUID configured in deploy/.env.example. Only the frontend port is exposed. The first deployment is for the lab network/VPN and HTTP; set secure cookies and terminate HTTPS before using a public HTTPS endpoint.
+Weights are mounted read-only through WEIGHTS_PATH, which must contain the files recorded in services/algorithm/vendor/ftt/SHA256_MANIFEST.json. Relative mount paths resolve from deploy/. Select one available NVIDIA GPU by index or UUID in GPU_DEVICE. MIN_GPU_MEMORY_GIB sets the minimum memory threshold (default 12 GiB). Deployment checks total capacity so existing jobs can drain; make doctor and new worker startup also check free memory. Admission does not depend on the model name. One worker uses one selected GPU; additional cards remain available for other work. A new GPU still requires a real sample smoke test. Only the frontend port is exposed. The first deployment is for the lab network/VPN and HTTP; set secure cookies and terminate HTTPS before using a public HTTPS endpoint.
+
+## Choosing a deployment machine
+
+Deployment host names and site settings stay outside Git. Clone the repository and check out the intended source commit on the target machine first. Run make setup there, then configure its .runtime/deploy.env for GPU_DEVICE, WEIGHTS_PATH and WEB_PORT. Select VERSION to match that source checkout; local builds execute on the selected host.
+
+To operate that checkout from another machine, copy deploy/target.env.example to .runtime/target.env and set DEPLOY_HOST to an SSH alias and DEPLOY_DIR to the repository path relative to that SSH user's home. The SSH alias owns connection details such as user, address and port. Makefile deployment, configuration, status, logs, cleanup and backup commands then run through SSH using the target's own environment file. This forwards operations, not source files, credentials, images or data. Update the target checkout before deploying a new commit.
+
+~~~sh
+make deploy VERSION=<commit-sha>
+make status
+make logs SERVICE=algorithm-worker
+# One operation on another configured SSH host:
+make doctor DEPLOY_HOST=<ssh-alias> DEPLOY_DIR=projects/rallymark
+# Explicitly operate on the current machine:
+RALLYMARK_LOCAL=1 make status
+~~~
+
+Checks and tests stay local. Smoke commands use BASE_URL for the HTTP endpoint; SMOKE_VIDEO points to a local sample file. Changing the SSH target does not copy PostgreSQL, videos, outputs or model weights. For migration, keep the original deployment intact, transfer a consistent database/config backup plus media and algorithm-work volumes, copy the manifest's weights and verify their hashes, then restore on the new machine. Before initializing the new database, configure its database credentials to match the backup environment; adjust GPU and mount settings for the new host. If the backed-up application does not support the new hardware, first build a schema-compatible version there, then run make restore BACKUP=backups/<timestamp> RESTORE_VERSION=<compatible-version>. This explicit override starts the compatible version, preserves the backup's recorded version, and records both in .runtime/last-restore.json. Default restore still starts the backed-up version. Older versions that restricted GPU models cannot be used as a rollback baseline on a newly supported GPU.
 
 ## Local development
 
@@ -47,4 +65,4 @@ GitLab is the primary source and CI system. Merge requests and master run Python
 
 make sync pushes the current branch to origin (GitLab), then github (private auxiliary repository), failing if either push fails. It does not rewrite or delete remote history.
 
-The deployment host runs the project runner through the system service rallymark-gitlab-runner.service as sujunjie, with Docker group access. It starts at boot and restarts on failure. Check it with systemctl status rallymark-gitlab-runner and journalctl -u rallymark-gitlab-runner. Runner registration credentials stay in the user's private GitLab Runner configuration, outside this repository. Do not start a second nohup runner for the same registration.
+The project runner uses the system service rallymark-gitlab-runner.service under a dedicated account with Docker group access. It starts at boot and restarts on failure. Check it with systemctl status rallymark-gitlab-runner and journalctl -u rallymark-gitlab-runner on the configured runner host. The runner can live on a different host from the application. Registration credentials stay in the account's private GitLab Runner configuration, outside this repository. Do not start a second nohup runner for the same registration.

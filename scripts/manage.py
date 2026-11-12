@@ -1,19 +1,86 @@
 #!/usr/bin/env python3
 """Operator commands shared by Makefile and deployment automation."""
 
+import csv
 import json
+import math
 import os
+import re
 import secrets
 import shlex
 import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / ".runtime"
 ENV = ROOT / (os.environ.get("ENV_FILE") or ".runtime/deploy.env")
+
+
+def forward_remote(action):
+    if os.environ.get("RALLYMARK_LOCAL") == "1":
+        return False
+    target = {}
+    file = Path(os.environ.get("TARGET_FILE") or RUNTIME / "target.env")
+    if file.exists():
+        for line in file.read_text().splitlines():
+            if line.strip() and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                if key not in ("DEPLOY_HOST", "DEPLOY_DIR"):
+                    raise ValueError("Unknown deployment target setting: " + key)
+                target[key] = value.strip()
+    host = os.environ.get("DEPLOY_HOST") or target.get("DEPLOY_HOST")
+    if not host:
+        return False
+    directory = (
+        os.environ.get("DEPLOY_DIR") or target.get("DEPLOY_DIR") or "projects/rallymark"
+    )
+    path = PurePosixPath(directory)
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.@-]*", host):
+        raise ValueError("DEPLOY_HOST must be an SSH host alias")
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or "~" in path.parts
+        or str(path) == "."
+    ):
+        raise ValueError(
+            "DEPLOY_DIR must be a nonempty path relative to the SSH user's home"
+        )
+    forwarded = ["RALLYMARK_LOCAL=1"]
+    for key in (
+        "VERSION",
+        "LOCAL_BUILD",
+        "RALLYMARK_MODE",
+        "ENV_FILE",
+        "REGISTRY",
+        "VIDEO_ID",
+        "APPLY",
+        "SERVICE",
+        "BACKUP",
+        "RESTORE_VERSION",
+        "CONFIG_FILE",
+        "WEB_PORT",
+        "BIND_ADDRESS",
+        "GPU_DEVICE",
+        "WEIGHTS_PATH",
+        "MIN_GPU_MEMORY_GIB",
+    ):
+        if os.environ.get(key):
+            forwarded.append(key + "=" + os.environ[key])
+    command = (
+        "cd -- "
+        + shlex.quote(str(path))
+        + " && exec "
+        + shlex.join(["env", *forwarded, "make", action])
+    )
+    ssh = ["ssh"]
+    if action == "config-edit" and sys.stdin.isatty():
+        ssh.append("-t")
+    run([*ssh, "--", host, command])
+    return True
 
 
 def run(args, *, capture=False, input=None, binary=False):
@@ -111,6 +178,33 @@ def version_directory():
     return RUNTIME / "dev" if os.environ.get("RALLYMARK_MODE") == "dev" else RUNTIME
 
 
+def gpu_preflight(*, require_free=True):
+    if os.environ.get("RALLYMARK_MODE") == "dev":
+        return
+    device = os.environ.get("GPU_DEVICE") or "0"
+    minimum = float(os.environ.get("MIN_GPU_MEMORY_GIB") or "12")
+    if not math.isfinite(minimum) or minimum <= 0:
+        raise ValueError("MIN_GPU_MEMORY_GIB must be a positive finite number")
+    output = run(
+        [
+            "nvidia-smi",
+            "--id=" + device,
+            "--query-gpu=name,uuid,memory.total,memory.free",
+            "--format=csv,noheader,nounits",
+        ],
+        capture=True,
+    )
+    rows = list(csv.reader(output.strip().splitlines(), skipinitialspace=True))
+    if len(rows) != 1 or len(rows[0]) != 4:
+        raise RuntimeError("GPU_DEVICE must select exactly one GPU")
+    name, identifier, total, free = rows[0]
+    if float(total) / 1024 < minimum:
+        raise RuntimeError(f"Assigned GPU needs {minimum:g} GiB total memory")
+    if require_free and float(free) / 1024 < minimum:
+        raise RuntimeError(f"Assigned GPU needs {minimum:g} GiB free memory")
+    print(json.dumps({"gpu": name, "uuid": identifier, "free_gib": float(free) / 1024}))
+
+
 def deploy(version, *, build=False, pull=False):
     if not version:
         raise RuntimeError("Specify VERSION=<immutable image tag>")
@@ -118,6 +212,7 @@ def deploy(version, *, build=False, pull=False):
     previous = previous_file.read_text().strip() if previous_file.exists() else None
     os.environ["VERSION"] = version
     compose("config", "--quiet")
+    gpu_preflight(require_free=False)
     if build:
         compose("build")
     elif pull:
@@ -161,7 +256,12 @@ def config_check():
         "config-check",
     )
     compose(
-        "run", "--rm", "--no-deps", "algorithm", "python", "-c",
+        "run",
+        "--rm",
+        "--no-deps",
+        "algorithm",
+        "python",
+        "-c",
         "from rallymark_algorithm.settings import Settings; "
         "Settings.load(); print('Algorithm configuration valid')",
     )
@@ -214,9 +314,12 @@ def restore():
     restored_config = (source / "config.yaml").read_bytes()
     deployment_environment = (source / "deploy.env").read_text()
     version_file = source / "version"
-    restore_version = version_file.read_text().strip()
-    if not restore_version:
+    backup_version = version_file.read_text().strip()
+    if not backup_version:
         raise RuntimeError("Backup application version is empty")
+    restore_version = (os.environ.get("RESTORE_VERSION") or backup_version).strip()
+    if not restore_version:
+        raise RuntimeError("Restore application version is empty")
     # Resolve all requirements before stopping services or replacing the database.
     previous_version = os.environ["VERSION"]
     os.environ["VERSION"] = restore_version
@@ -267,6 +370,12 @@ def restore():
     version_directory().mkdir(parents=True, mode=0o700, exist_ok=True)
     (version_directory() / "current-version").write_text(restore_version + "\n")
     business("undrain")
+    (version_directory() / "last-restore.json").write_text(
+        json.dumps(
+            {"backup_version": backup_version, "application_version": restore_version}
+        )
+        + "\n"
+    )
     print("Restored database/configuration. Media volumes were retained.")
 
 
@@ -286,6 +395,8 @@ def main():
     if action == "sync":
         run(["git", "push", "origin", "HEAD"])
         run(["git", "push", "github", "HEAD"])
+        return
+    if forward_remote(action):
         return
     requested_version = os.environ.get("VERSION")
     load_env()
@@ -323,8 +434,7 @@ def main():
         run(["docker", "version"])
         run(["docker", "compose", "version"])
         compose("config", "--quiet")
-        if os.environ.get("GPU_DEVICE"):
-            run(["nvidia-smi", "--query-gpu=name,uuid,memory.used", "--format=csv"])
+        gpu_preflight()
         print("Free disk bytes:", shutil.disk_usage(ROOT).free)
     elif action == "config-edit":
         run([*shlex.split(os.environ.get("EDITOR", "vi")), configured_path()])
@@ -364,6 +474,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (RuntimeError, subprocess.CalledProcessError) as error:
+    except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print("Operation failed:", error, file=sys.stderr)
         sys.exit(1)

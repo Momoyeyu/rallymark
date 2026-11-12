@@ -44,6 +44,7 @@ class Settings(BaseModel):
     environment: str = "production"
     log_level: str = "INFO"
     retention_days: int = Field(default=7, ge=1)
+    min_gpu_memory_gib: float = Field(default=12, gt=0, le=256)
 
     @model_validator(mode="after")
     def check_fake(self):
@@ -69,6 +70,7 @@ class Settings(BaseModel):
             environment=os.environ.get("ENVIRONMENT", "production"),
             log_level=raw.get("logging", {}).get("level", "INFO"),
             retention_days=raw.get("application", {}).get("retention_days", 7),
+            min_gpu_memory_gib=os.environ.get("MIN_GPU_MEMORY_GIB", "12"),
         )
         return settings
 
@@ -95,6 +97,9 @@ class JsonFormatter(logging.Formatter):
             "attempt",
             "elapsed_seconds",
             "error_code",
+            "gpu_name",
+            "gpu_memory_gib",
+            "gpu_free_gib",
         ):
             if hasattr(record, key):
                 entry[key] = getattr(record, key)

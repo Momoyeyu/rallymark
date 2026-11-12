@@ -9,4 +9,5 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
 - Use make check and make test. GPU inference runs on the deployment machine through make smoke-gpu; CPU CI uses the fake runner.
 - Runtime files, secrets, model weights, video data, caches and outputs stay outside Git. Use relative repository paths in documentation and configuration templates.
 - Deployment uses immutable version tags. Retain previous versions and drain running work before changing services. Do not remove data volumes to troubleshoot.
+- Select hosts through .runtime/target.env and GPU devices through the target's .runtime/deploy.env. Never restrict inference to a GPU model name or commit a machine's GPU UUID. Verify real CUDA inference after hardware changes.
 - Add abstractions only for an actual repeated behavior. Keep comments for non-obvious constraints, and keep a single source of truth for documentation.

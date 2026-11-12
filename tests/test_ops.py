@@ -15,6 +15,11 @@ spec.loader.exec_module(ops)
 
 
 class OpsReview(unittest.TestCase):
+    def setUp(self):
+        remote = patch.object(ops, "forward_remote", return_value=False)
+        remote.start()
+        self.addCleanup(remote.stop)
+
     def test_invalid_algorithm_configuration_does_not_drain(self):
         def compose(*args, **kwargs):
             if args[:4] == ("run", "--rm", "--no-deps", "algorithm"):
@@ -87,6 +92,12 @@ class OpsReview(unittest.TestCase):
             self.assertEqual((runtime / "dev/current-version").read_text(), "local\n")
 
     def test_restore_database_is_atomic(self):
+        self.restore_case()
+
+    def test_migration_can_restore_with_a_compatible_application(self):
+        self.restore_case("v2")
+
+    def restore_case(self, override=""):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "backup"
@@ -106,7 +117,7 @@ class OpsReview(unittest.TestCase):
                     return json.dumps(
                         {
                             "services": {
-                                name: {"image": name + ":v1"}
+                                name: {"image": name + ":" + os.environ["VERSION"]}
                                 for name in (
                                     "api",
                                     "algorithm",
@@ -124,6 +135,7 @@ class OpsReview(unittest.TestCase):
                     {
                         "BACKUP": str(source),
                         "VERSION": "v2",
+                        "RESTORE_VERSION": override,
                         "POSTGRES_PASSWORD": "p",
                         "BUSINESS_DB_PASSWORD": "b",
                         "ALGORITHM_DB_PASSWORD": "a",
@@ -145,6 +157,128 @@ class OpsReview(unittest.TestCase):
             )
             self.assertIn("--single-transaction", restore_command)
             self.assertEqual(config.read_text(), "algorithm: {}\n")
+            self.assertEqual(
+                (runtime / "current-version").read_text().strip(), override or "v1"
+            )
+            self.assertEqual((source / "version").read_text(), "v1\n")
+            provenance = json.loads((runtime / "last-restore.json").read_text())
+            self.assertEqual(provenance["backup_version"], "v1")
+            self.assertEqual(provenance["application_version"], override or "v1")
+
+
+class DeploymentTargets(unittest.TestCase):
+    def test_remote_operations_use_selected_host_and_directory(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(ops, "RUNTIME", Path(directory)),
+            patch.dict(
+                os.environ,
+                {
+                    "DEPLOY_HOST": "bigstrong",
+                    "DEPLOY_DIR": "projects/rallymark",
+                    "VERSION": "123abcd",
+                },
+                clear=True,
+            ),
+            patch.object(ops, "run") as run,
+        ):
+            self.assertTrue(ops.forward_remote("deploy"))
+            command = run.call_args.args[0]
+            self.assertEqual(command[:3], ["ssh", "--", "bigstrong"])
+            self.assertIn("projects/rallymark", command[-1])
+            self.assertIn("RALLYMARK_LOCAL=1", command[-1])
+            self.assertIn("VERSION=123abcd", command[-1])
+
+    def test_remote_child_does_not_forward_again(self):
+        with (
+            patch.dict(
+                os.environ,
+                {"DEPLOY_HOST": "bigstrong", "RALLYMARK_LOCAL": "1"},
+                clear=True,
+            ),
+            patch.object(ops, "run") as run,
+        ):
+            self.assertFalse(ops.forward_remote("deploy"))
+            run.assert_not_called()
+
+    def test_remote_paths_cannot_escape_deployment_home(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(ops, "RUNTIME", Path(directory)),
+            patch.dict(
+                os.environ,
+                {"DEPLOY_HOST": "bigstrong", "DEPLOY_DIR": "../data"},
+                clear=True,
+            ),
+            patch.object(ops, "run") as run,
+        ):
+            with self.assertRaises(ValueError):
+                ops.forward_remote("data-clean")
+            run.assert_not_called()
+
+    def test_saved_target_can_be_overridden_without_editing_code(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "target.env").write_text(
+                "DEPLOY_HOST=old-host\nDEPLOY_DIR=projects/rallymark\n"
+            )
+            with (
+                patch.object(ops, "RUNTIME", root),
+                patch.dict(os.environ, {"DEPLOY_HOST": "new-host"}, clear=True),
+                patch.object(ops, "run") as run,
+            ):
+                self.assertTrue(ops.forward_remote("status"))
+                self.assertEqual(run.call_args.args[0][2], "new-host")
+
+
+class GpuPreflight(unittest.TestCase):
+    def test_busy_current_job_can_reach_deployment_drain(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(ops, "RUNTIME", Path(directory)),
+            patch.dict(os.environ, {"GPU_DEVICE": "0"}, clear=True),
+            patch.object(
+                ops, "run", return_value="RTX 4080, GPU-example, 16376, 4096\n"
+            ),
+            patch.object(ops, "compose", return_value=""),
+            patch.object(ops, "drain") as drain,
+            patch.object(ops, "migrate"),
+            patch.object(ops, "business"),
+        ):
+            ops.deploy("portable", build=True)
+            drain.assert_called_once()
+
+    def test_selected_uuid_is_checked(self):
+        with (
+            patch.dict(
+                os.environ,
+                {"GPU_DEVICE": "GPU-selected", "MIN_GPU_MEMORY_GIB": "12"},
+                clear=True,
+            ),
+            patch.object(
+                ops, "run", return_value="RTX 4080, GPU-selected, 16376, 15360\n"
+            ) as run,
+        ):
+            ops.gpu_preflight()
+            self.assertIn("--id=GPU-selected", run.call_args.args[0])
+
+    def test_busy_gpu_fails_before_deployment(self):
+        with (
+            patch.dict(os.environ, {"GPU_DEVICE": "0"}, clear=True),
+            patch.object(
+                ops, "run", return_value="RTX 4080, GPU-example, 16376, 4096\n"
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "free"):
+                ops.gpu_preflight()
+
+    def test_fake_development_needs_no_gpu(self):
+        with (
+            patch.dict(os.environ, {"RALLYMARK_MODE": "dev"}, clear=True),
+            patch.object(ops, "run") as run,
+        ):
+            ops.gpu_preflight()
+            run.assert_not_called()
 
 
 if __name__ == "__main__":

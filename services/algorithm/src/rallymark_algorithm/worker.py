@@ -14,6 +14,7 @@ from .db import claim_job, database, gpu_lock
 from .models import Job, WorkerStatus, utcnow
 from .ops import cleanup
 from .runner import AnalysisFailure, run_analysis
+from .runtime import validate_gpu
 from .settings import Settings, configure_logging
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,7 @@ def main():
             raise RuntimeError("FFmpeg and ffprobe are required")
         import nms_1d_cpu  # noqa: F401 - validate the compiled runtime before accepting jobs
 
+        gpu = validate_gpu(torch.cuda, settings.min_gpu_memory_gib)
         manifest = json.loads((settings.ftt_root / "SHA256_MANIFEST.json").read_text())
         for name, expected in manifest.items():
             if not name.startswith("weights/"):
@@ -125,8 +127,7 @@ def main():
                     digest.update(block)
             if file.stat().st_size != expected["bytes"] or digest.hexdigest() != expected["sha256"]:
                 raise RuntimeError("Model asset checksum mismatch: " + file.name)
-        if not torch.cuda.is_available() or "4090" not in torch.cuda.get_device_name(0):
-            raise RuntimeError("The algorithm worker requires its assigned RTX 4090")
+        logger.info("gpu_ready", extra=gpu)
     last_cleanup = 0.0
     with gpu_lock(engine) as connection:
         while not stopping.is_set():

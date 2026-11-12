@@ -17,7 +17,7 @@ make check
 make test
 ~~~
 
-The development Compose stack uses a fake algorithm runner. It requires Docker Compose 2.24.4 or newer. Run make help for commands. Use make deploy VERSION=<commit-sha> to build and deploy on the target host. Follow [operations](docs/operations.md) for real GPU deployment, configuration, cleanup, backup and rollback.
+The development Compose stack uses a fake algorithm runner. It requires Docker Compose 2.24.4 or newer. Run make help for commands. Choose the SSH deployment target in .runtime/target.env and the target's GPU and paths in its .runtime/deploy.env. Use make deploy VERSION=<commit-sha> to build and deploy on that host. Follow [operations](docs/operations.md) for setup, migration, cleanup, backup and rollback.
 
 ## Structure
 
