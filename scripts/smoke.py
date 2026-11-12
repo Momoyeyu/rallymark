@@ -27,7 +27,7 @@ def main():
             urllib.request.Request(base + path, data=data, headers=headers or {}),
             timeout=60,
         )
-        return json.load(response)
+        return None if response.status == 204 else json.load(response)
 
     with tempfile.TemporaryDirectory() as folder:
         video = (

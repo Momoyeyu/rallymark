@@ -12,8 +12,8 @@ services:
   algorithm-worker:
     environment:
       ENVIRONMENT: development
-    image: ${REGISTRY}/algorithm-api:${VERSION}
-    build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: api}
+    image: ${REGISTRY}/algorithm-dev-worker:${VERSION}
+    build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: dev-worker}
     volumes: !override
       - algorithm-work:/data/work
       - ./config.dev.yaml:/app/config.yaml:ro

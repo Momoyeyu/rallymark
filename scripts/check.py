@@ -18,7 +18,10 @@ def main():
     args = parser.parse_args()
     if args.tests:
         run(
-            ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
+            [
+                "uv", "run", "--project", "services/api", "python", "-m",
+                "unittest", "discover", "-s", "tests", "-p", "test_*.py",
+            ],
             ROOT,
         )
     for service in ["api", "algorithm"]:

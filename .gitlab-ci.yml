@@ -5,6 +5,7 @@ variables:
   PIP_DEFAULT_TIMEOUT: '30'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
   UV_CACHE_DIR: $CI_PROJECT_DIR/.cache/uv
+  UV_PYTHON_INSTALL_DIR: $CI_PROJECT_DIR/.cache/python
   UV_PYTHON_INSTALL_MIRROR: https://gh-proxy.org/https://github.com/astral-sh/python-build-standalone/releases/download
   POSTGRES_DB: rallymark_test
   POSTGRES_USER: postgres
@@ -32,7 +33,7 @@ python:
     - cd ../algorithm && uv sync --frozen && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
   cache:
     key: python-locks
-    paths: [.cache/uv/]
+    paths: [.cache/uv/, .cache/python/]
 web:
   stage: verify
   image: node:24-bookworm
@@ -41,7 +42,7 @@ web:
   cache:
     key:
       files: [apps/web/pnpm-lock.yaml]
-    paths: [.cache/ms-playwright/]
+    paths: [.cache/ms-playwright/, .cache/uv/, .cache/python/]
   before_script:
     - sed -i "s@http://deb.debian.org/debian@https://mirrors.tuna.tsinghua.edu.cn/debian@g" /etc/apt/sources.list.d/debian.sources
     - apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=20 update && apt-get install -y --no-install-recommends python3 python3-pip ffmpeg

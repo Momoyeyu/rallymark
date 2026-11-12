@@ -1,5 +1,6 @@
 .git
 .implementation
+.cache
 **/.venv
 **/node_modules
 **/__pycache__

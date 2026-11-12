@@ -25,7 +25,7 @@ make setup
 make dev
 ~~~
 
-The development override selects the fake runner, uses a separate Compose project, and does not request a GPU. Development version records live under .runtime/dev/; production version records remain under .runtime/. For subsequent development operations, set RALLYMARK_MODE=dev. It exercises upload, durable task processing and playback through the same API. make check and make test run the maintained validation commands. Production validation uses make smoke with BASE_URL pointing at a fake development deployment; make smoke-gpu additionally requires SMOKE_VIDEO pointing to the validated real sample.
+The development override selects the fake runner, uses a separate Compose project, and does not request a GPU. Development version records live under .runtime/dev/; production version records remain under .runtime/. For subsequent development operations, set RALLYMARK_MODE=dev; also set WEB_PORT=8181 when running beside production. It exercises upload, durable task processing and playback through the same API. make check and make test run the maintained validation commands. Production validation uses make smoke with BASE_URL pointing at a fake development deployment; make smoke-gpu additionally requires SMOKE_VIDEO pointing to the validated real sample.
 
 ## Update and recovery
 

@@ -21,3 +21,7 @@ RUN --mount=type=cache,id=rallymark-uv,target=/root/.cache/uv uv sync --frozen -
 RUN cd vendor/ftt/code/third_party/OpenTAD/opentad/models/utils/post_processing/nms && /app/.venv/bin/python -m pip install --no-build-isolation --no-deps .
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1
 CMD ["python", "-m", "rallymark_algorithm.worker"]
+
+FROM api AS dev-worker
+RUN sed -i "s@http://deb.debian.org/debian@https://mirrors.tuna.tsinghua.edu.cn/debian@g" /etc/apt/sources.list.d/debian.sources && apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=20 update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+CMD ["python", "-m", "rallymark_algorithm.worker"]
