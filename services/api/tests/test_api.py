@@ -174,7 +174,7 @@ def test_readiness_and_config_snapshot(context):
     assert video["latest_analysis"]["algorithm_version"] == "ftt-c836c83"
 
 
-def test_invalid_algorithm_result_does_not_publish(context):
+def test_invalid_algorithm_result_does_not_publish(context, caplog):
     import asyncio
 
     client, _, factory, settings = context
@@ -199,6 +199,8 @@ def test_invalid_algorithm_result_does_not_publish(context):
     result = client.get(f"/api/v1/analyses/{analysis_id}").json()
     assert result["status"] != "succeeded"
     assert result["rallies"] == []
+    event = next(record for record in caplog.records if record.message == "algorithm_poll_failed")
+    assert event.fields["request_id"] == result["error"]["request_id"]
 
 
 def test_private_poster_and_rally_thumbnail_cache(context, monkeypatch):

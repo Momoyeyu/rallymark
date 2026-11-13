@@ -129,7 +129,13 @@ async def dispatch_once(factory, settings, config, client):
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
         logger.warning(
             "algorithm_poll_failed",
-            extra={"fields": {"analysis_id": job_id, "error_type": type(error).__name__}},
+            extra={
+                "fields": {
+                    "analysis_id": job_id,
+                    "error_type": type(error).__name__,
+                    "request_id": token,
+                }
+            },
         )
         with factory.begin() as db:
             item = db.get(Analysis, job_id)
