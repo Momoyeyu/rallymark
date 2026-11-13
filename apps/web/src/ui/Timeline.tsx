@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Rally } from '../api';
 import { time } from '../player/time';
 export function Timeline({
@@ -12,21 +13,24 @@ export function Timeline({
   onSeek: (value: number) => void;
 }) {
   const percentage = duration ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0;
+  const marks = useMemo(
+    () =>
+      rallies
+        .map((r) => {
+          const x = (r.start_s / duration) * 1000;
+          const width = Math.max(2, ((r.end_s - r.start_s) / duration) * 1000);
+          return `M${x},0h${width}v4h-${width}z`;
+        })
+        .join(' '),
+    [rallies, duration],
+  );
   return (
     <div className="timeline">
       <div className="seek-wrap">
         <div className="timeline-rail" aria-hidden="true">
-          <div className="rally-marks">
-            {rallies.map((r) => (
-              <i
-                key={r.id}
-                style={{
-                  left: `${(r.start_s / duration) * 100}%`,
-                  width: `${((r.end_s - r.start_s) / duration) * 100}%`,
-                }}
-              />
-            ))}
-          </div>
+          <svg className="rally-marks" viewBox="0 0 1000 4" preserveAspectRatio="none">
+            <path d={marks} />
+          </svg>
           <div className="timeline-fill" style={{ width: `${percentage}%` }} />
           <span className="timeline-thumb" style={{ left: `${percentage}%` }} />
         </div>

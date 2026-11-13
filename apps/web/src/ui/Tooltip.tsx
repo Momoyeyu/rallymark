@@ -37,7 +37,14 @@ export function Tooltip({
     <>
       {cloneElement(children, getReferenceProps({ ...children.props, ref: refs.setReference }))}
       {open && (
-        <FloatingPortal root={refs.domReference.current?.closest('dialog')}>
+        <FloatingPortal
+          root={
+            refs.domReference.current?.closest('dialog') ??
+            (document.fullscreenElement?.contains(refs.domReference.current ?? null)
+              ? (document.fullscreenElement as HTMLElement)
+              : undefined)
+          }
+        >
           <div
             ref={refs.setFloating}
             style={floatingStyles}

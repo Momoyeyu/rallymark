@@ -8,6 +8,7 @@ import {
   SpeakerHigh,
   SpeakerSlash,
   CornersOut,
+  CornersIn,
 } from '@phosphor-icons/react';
 import { IconButton, AutoSwitch, Score } from '../ui/controls';
 import { RallyBrowser } from '../ui/RallyBrowser';
@@ -44,6 +45,12 @@ export default function Player({
     [position, setPosition] = useState(0);
   const [automatic, setAutomatic] = useState(true),
     [muted, setMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const change = () => setIsFullscreen(document.fullscreenElement === shell.current);
+    document.addEventListener('fullscreenchange', change);
+    return () => document.removeEventListener('fullscreenchange', change);
+  }, []);
   const [error, setError] = useState(''),
     [buffering, setBuffering] = useState(false);
   const rallies = analysis.rallies;
@@ -169,7 +176,11 @@ export default function Player({
               icon={muted ? SpeakerSlash : SpeakerHigh}
               onClick={() => setMuted(!muted)}
             />
-            <IconButton label="全屏" icon={CornersOut} onClick={fullscreen} />
+            <IconButton
+              label={isFullscreen ? '退出全屏' : '全屏'}
+              icon={isFullscreen ? CornersIn : CornersOut}
+              onClick={fullscreen}
+            />
           </div>
         </div>
       </div>
@@ -228,7 +239,7 @@ export default function Player({
           onSeek={(value) => {
             const element = media.current;
             if (!element) return;
-            execute(controller.manualSeek(value, !element.paused));
+            execute(controller.manualSeek(value, !element.paused && value < video.duration_s));
             record({ name: 'manual_seek', video_id: video.id });
           }}
         />

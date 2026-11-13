@@ -47,9 +47,11 @@ export function Select({
       size({
         padding: 12,
         apply({ availableHeight, rects, elements }) {
+          const available = Math.max(0, Math.min(384, availableHeight));
+          const rows = Math.floor((available - 14) / 60);
           Object.assign(elements.floating.style, {
             width: `${rects.reference.width}px`,
-            maxHeight: `${Math.max(0, Math.floor((Math.min(384, availableHeight) - 12) / 60) * 60 + 12)}px`,
+            maxHeight: `${rows > 0 ? rows * 60 + 14 : available}px`,
           });
         },
       }),

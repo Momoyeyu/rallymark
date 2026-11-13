@@ -14,3 +14,6 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
 
 - Reuse web UI primitives in apps/web/src/ui. Icon controls keep accessible names and at least 44px touch targets. Scores and counters use stable dimensions and tabular numbers; inferred/unknown states use graphics and compact labels rather than changing-length prose.
 - Local import and experiment preloading are development-only. Keep their lazy entry behind import.meta.env.DEV; pnpm build must verify no debug UI or data endpoint leaks into production assets.
+
+- Follow docs/design/interface.md for the UI language. Visible selectors, file pickers, progress and tooltips use the shared custom components; preserve semantic keyboard controls underneath. Verify expanded controls and viewport edges, not only collapsed screenshots.
+- Create reversible Git checkpoints for stable UI milestones and push both remotes. ui-baseline-20261113 records the pre-workspace version.

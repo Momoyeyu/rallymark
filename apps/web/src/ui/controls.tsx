@@ -36,7 +36,7 @@ export function AutoSwitch({ checked, onClick }: { checked: boolean; onClick: ()
     <button
       className="auto-toggle"
       role="switch"
-      aria-label="自动跳转"
+      aria-label="自动跳转（连播）"
       aria-checked={checked}
       onClick={onClick}
     >
@@ -63,15 +63,17 @@ export function Score({
   const inferred = rally?.score_status === 'inferred';
   const observed = rally?.score_status === 'observed';
   const Glyph = rally?.score ? (observed ? Check : CircleDashed) : hasScores ? CircleDashed : Hash;
-  const label = rally?.score
-    ? inferred
-      ? '推断比分'
-      : observed
-        ? '识别比分'
-        : '待核比分'
-    : hasScores
-      ? '比分未知'
-      : '回合序号';
+  const label = !rally
+    ? '回合间隔'
+    : rally.score
+      ? inferred
+        ? '推断比分'
+        : observed
+          ? '识别比分'
+          : '待核比分'
+      : hasScores
+        ? '比分未知'
+        : '回合序号';
   return (
     <Tooltip label={label}>
       <span className="score-display" aria-label={label}>

@@ -120,7 +120,7 @@ export default function App() {
       </a>
       <header className="app-header">
         <Brand />
-        <nav>
+        <nav aria-label="视频操作">
           <IconButton
             label="历史视频"
             icon={ClockCounterClockwise}
@@ -137,6 +137,8 @@ export default function App() {
       <input
         ref={input}
         type="file"
+        name="file"
+        aria-label="上传原视频"
         accept="video/mp4,.mp4"
         hidden
         onChange={(e) => void onUpload(e.target.files?.[0])}
@@ -202,7 +204,7 @@ export default function App() {
               <PingPong weight="fill" aria-hidden="true" />
             </div>
             <h1>{stages[analysis.status] || '分析中'}</h1>
-            <p>{video.title}</p>
+            <p className="status-title">{video.title}</p>
             {analysis.progress && analysis.progress.total > 0 ? (
               <>
                 <Progress
@@ -243,9 +245,11 @@ export default function App() {
             />
             <small>MP4 · H.264 · 最大 500 MB / 15 分钟</small>
             {!!videos.data?.items.length && (
-              <button className="text-button" onClick={() => setHistory(true)}>
-                查看历史视频
-              </button>
+              <ActionButton
+                icon={ClockCounterClockwise}
+                label="历史视频"
+                onClick={() => setHistory(true)}
+              />
             )}
           </section>
         )}

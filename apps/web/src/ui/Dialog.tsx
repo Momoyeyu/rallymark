@@ -40,6 +40,26 @@ export function Dialog({
         onClose();
       }}
       onClose={onClose}
+      onKeyDown={(event) => {
+        if (event.key !== 'Tab') return;
+        const items = Array.from(
+          event.currentTarget.querySelectorAll<HTMLElement>(
+            'button:not([disabled]),a[href],input:not([hidden]),[tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter(
+          (item) =>
+            item.getClientRects().length && !item.hasAttribute('data-floating-ui-focus-guard'),
+        );
+        const first = items[0],
+          last = items.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

@@ -32,6 +32,11 @@ export default function LocalReview() {
   );
   const [confirmRemove, setConfirmRemove] = useState(false);
   const urls = useRef(new Set<string>());
+  const removalActions = useRef<HTMLDivElement>(null);
+  function showRemoveConfirmation(value: boolean) {
+    setConfirmRemove(value);
+    requestAnimationFrame(() => removalActions.current?.querySelector('button')?.focus());
+  }
   const entry = clips.find((clip) => clip.id === selected);
   useEffect(() => {
     const owned = urls.current;
@@ -172,6 +177,10 @@ export default function LocalReview() {
     const next = clips.find((clip) => clip.id !== entry.id);
     setClips((previous) => previous.filter((clip) => clip.id !== entry.id));
     setSelected(next?.id ?? '');
+    const url = new URL(location.href);
+    if (next) url.searchParams.set('clip', next.id);
+    else url.searchParams.delete('clip');
+    window.history.replaceState({}, '', url);
     setConfirmRemove(false);
     setConfigOpen(!next?.metadata);
   }
@@ -294,7 +303,7 @@ export default function LocalReview() {
                 {entry.error}，请重新选择 JSON。
               </p>
             )}
-            <div className="dialog-footer">
+            <div className="dialog-footer" ref={removalActions}>
               {confirmRemove ? (
                 <>
                   <span className="muted">从复盘列表移除？原文件不会删除。</span>
@@ -302,7 +311,7 @@ export default function LocalReview() {
                     <ActionButton
                       icon={GearSix}
                       label="保留"
-                      onClick={() => setConfirmRemove(false)}
+                      onClick={() => showRemoveConfirmation(false)}
                     />
                     <ActionButton icon={Trash} label="移除" tone="danger" onClick={removeClip} />
                   </div>
@@ -312,7 +321,7 @@ export default function LocalReview() {
                   icon={Trash}
                   label="移除此视频"
                   tone="danger"
-                  onClick={() => setConfirmRemove(true)}
+                  onClick={() => showRemoveConfirmation(true)}
                 />
               )}
             </div>
