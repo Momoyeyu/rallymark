@@ -579,3 +579,70 @@ test('unavailable analysis stops before video transfer and keeps a public reques
   await expect(page.getByRole('alert')).toContainText('capacity-test');
   expect(uploads).toBe(0);
 });
+
+test('static preview offers six matches with the shared mobile player and no upload or API', async ({
+  page,
+}) => {
+  let apiRequests = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) apiRequests++;
+  });
+  await page.route('**/demos/*.mp4', respondMedia);
+  await page.route('**/demos/manifest.json', (route) =>
+    route.fulfill({
+      json: {
+        items: Array.from({ length: 6 }, (_, i) => ({
+          media: `/demos/match-${i}.mp4`,
+          video: {
+            id: `match-${i}`,
+            title: `比赛 ${i + 1}`,
+            duration_s: 12,
+            width: 320,
+            height: 180,
+            size_bytes: media.length,
+            created_at: '',
+            expires_at: '',
+            latest_analysis: {
+              id: `result-${i}`,
+              video_id: `match-${i}`,
+              status: 'succeeded',
+              progress: null,
+              rallies: [
+                { id: 'one', start_s: 1, end_s: 2, score: '0:0', score_status: 'observed' },
+                { id: 'two', start_s: 5, end_s: 7, score: '1:0', score_status: 'inferred' },
+              ],
+              warnings: [],
+              error: null,
+              created_at: '',
+              config_hash: '',
+              algorithm_version: 'test',
+            },
+          },
+        })),
+      },
+    }),
+  );
+  await page.goto('http://127.0.0.1:4188/');
+  await expect(page.getByRole('button', { name: '播放', exact: true })).toBeVisible();
+  expect(await page.locator('input[type=file]').count()).toBe(0);
+  expect(await page.getByRole('button', { name: /上传|选择文件|本地文件/ }).count()).toBe(0);
+  for (let i = 0; i < 6; i++) {
+    await page.getByRole('combobox', { name: '当前视频' }).click();
+    await page.getByRole('option').nth(i).click();
+    await expect(page.locator('video')).toHaveAttribute('src', `/demos/match-${i}.mp4`);
+    await expect
+      .poll(() => page.locator('video').evaluate((video) => (video as HTMLVideoElement).readyState))
+      .toBeGreaterThanOrEqual(1);
+  }
+  await page.getByRole('button', { name: '下一回合', exact: true }).click();
+  await expect
+    .poll(() => page.locator('video').evaluate((video) => !(video as HTMLVideoElement).paused))
+    .toBeTruthy();
+  for (const width of [320, 390, 844, 1920]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    ).toBeTruthy();
+  }
+  expect(apiRequests).toBe(0);
+});
