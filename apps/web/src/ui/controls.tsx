@@ -2,11 +2,12 @@ import type { ButtonHTMLAttributes } from 'react';
 import type { Icon } from '@phosphor-icons/react';
 import { ArrowsClockwise, Check, CircleDashed, Hash } from '@phosphor-icons/react';
 import type { Rally } from '../api';
+import { Tooltip } from './Tooltip';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   icon: Icon;
   label: string;
-  tone?: 'plain' | 'primary' | 'surface';
+  tone?: 'plain' | 'primary' | 'surface' | 'danger';
   size?: 'normal' | 'large';
 };
 export function IconButton({
@@ -18,15 +19,16 @@ export function IconButton({
   ...props
 }: ButtonProps) {
   return (
-    <button
-      {...props}
-      type={props.type ?? 'button'}
-      className={`icon-button ${tone} ${size} ${className}`}
-      aria-label={label}
-      title={label}
-    >
-      <Glyph weight="bold" aria-hidden="true" />
-    </button>
+    <Tooltip label={label}>
+      <button
+        {...props}
+        type={props.type ?? 'button'}
+        className={`icon-button ${tone} ${size} ${className}`}
+        aria-label={label}
+      >
+        <Glyph weight="bold" aria-hidden="true" />
+      </button>
+    </Tooltip>
   );
 }
 export function AutoSwitch({ checked, onClick }: { checked: boolean; onClick: () => void }) {
@@ -37,10 +39,9 @@ export function AutoSwitch({ checked, onClick }: { checked: boolean; onClick: ()
       aria-label="自动跳转"
       aria-checked={checked}
       onClick={onClick}
-      title={checked ? '自动跳转已开' : '自动跳转已关'}
     >
       <ArrowsClockwise aria-hidden="true" />
-      <span className="switch-caption">自动</span>
+      <span className="switch-caption">连播</span>
       <span className={`switch ${checked ? 'on' : ''}`} aria-hidden="true">
         <i />
       </span>
@@ -72,10 +73,14 @@ export function Score({
       ? '比分未知'
       : '回合序号';
   return (
-    <span className="score-display" title={label} aria-label={label}>
-      <b>{rally ? scoreLabel(rally, index, hasScores) : '—:—'}</b>
-      <Glyph className={inferred ? 'score-inferred' : ''} aria-hidden="true" />
-    </span>
+    <Tooltip label={label}>
+      <span className="score-display" aria-label={label}>
+        <b className={(rally?.score?.length || 0) > 5 ? 'score-long' : undefined}>
+          {rally ? scoreLabel(rally, index, hasScores) : '—:—'}
+        </b>
+        <Glyph className={inferred ? 'score-inferred' : ''} aria-hidden="true" />
+      </span>
+    </Tooltip>
   );
 }
 

@@ -125,13 +125,18 @@ test('local review uses six independent originals and metadata without API reque
       buffer: media,
     })),
   );
-  const select = page.getByLabel('当前视频', { exact: true });
-  await expect(select.locator('option')).toHaveCount(6);
-  const options = await select
-    .locator('option')
-    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+  const select = page.getByRole('combobox', { name: '当前视频', exact: true });
+  await page.getByRole('button', { name: '关闭本地文件', exact: true }).click();
+  await select.click();
+  await expect(page.getByRole('option')).toHaveCount(6);
+  await page.keyboard.press('Escape');
+  const options = [0, 1, 2, 3, 4, 5];
+  async function choose(index: number) {
+    await select.click();
+    await page.getByRole('option').nth(index).click();
+  }
   for (let i = 0; i < options.length; i++) {
-    await select.selectOption(options[i]);
+    await choose(options[i]);
     await page.getByLabel('此视频的分析 JSON', { exact: true }).setInputFiles({
       name: `match-${i + 1}.json`,
       mimeType: 'application/json',
@@ -154,7 +159,7 @@ test('local review uses six independent originals and metadata without API reque
     await expect(page.getByLabel('原视频（可多选）', { exact: true })).toBeHidden();
     await expect(select).toBeVisible();
   }
-  await select.selectOption(options[0]);
+  await choose(options[0]);
   await expect(
     page.getByRole('button', { name: '跳转回合 1 比分 0:0', exact: true }),
   ).toBeVisible();
@@ -184,7 +189,8 @@ test('local review uses six independent originals and metadata without API reque
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
   ).toBeTruthy();
   await page.getByRole('button', { name: '本地文件设置', exact: true }).click();
-  await expect(page.getByLabel('此视频的分析 JSON', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /分析数据/ })).toBeVisible();
+  await expect(page.getByLabel('此视频的分析 JSON', { exact: true })).toBeHidden();
   await page.getByLabel('此视频的分析 JSON', { exact: true }).setInputFiles({
     name: 'invalid.json',
     mimeType: 'application/json',

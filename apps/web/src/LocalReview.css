@@ -1,58 +1,6 @@
-.local-files {
-  padding: 18px;
-  display: grid;
-  gap: 12px;
+.local-review .workspace-actions {
+  width: min(100%, 480px);
 }
-.local-files h1 {
-  font-size: 20px;
-  margin: 0;
-}
-.local-files p {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.local-files label {
-  display: grid;
-  gap: 6px;
-  font-size: 13px;
-  min-width: 0;
-}
-.local-files input,
-.local-files select {
-  width: 100%;
-  min-width: 0;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: inherit;
-}
-.local-files input::file-selector-button {
-  margin-right: 8px;
-}
-.local-rallies {
-  padding-top: 12px;
-}
-.local-current {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 10px;
-}
-.local-config {
-  display: grid;
-  gap: 12px;
-}
-.local-config[hidden] {
-  display: none;
-}
-.local-config-toggle {
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 13px;
-}
-.local-review .video-title {
-  padding-top: 0;
+.local-review .workspace-actions > .select-trigger {
+  flex: 1;
 }

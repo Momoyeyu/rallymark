@@ -4,7 +4,6 @@ import {
   ClockCounterClockwise,
   UploadSimple,
   PingPong,
-  X,
   ArrowClockwise,
   CheckCircle,
   FilmStrip,
@@ -14,6 +13,8 @@ import { time } from './player/time';
 import { IconButton, ActionButton } from './ui/controls';
 import { Brand } from './ui/Brand';
 import { Notice } from './ui/Notice';
+import { Dialog } from './ui/Dialog';
+import { Progress } from './ui/Progress';
 import { ApiError, request, upload, track, type Video } from './api';
 
 const stages: Record<string, string> = {
@@ -59,34 +60,6 @@ export default function App() {
   });
   const video = detail.data,
     analysis = video?.latest_analysis;
-  useEffect(() => {
-    if (!history) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const dialog = document.querySelector<HTMLElement>('.history-drawer');
-    const items = () =>
-      Array.from(dialog?.querySelectorAll<HTMLElement>('button,[href],input') || []);
-    items()[0]?.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setHistory(false);
-      if (event.key === 'Tab') {
-        const controls = items(),
-          first = controls[0],
-          last = controls[controls.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last?.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    document.addEventListener('keydown', key);
-    return () => {
-      document.removeEventListener('keydown', key);
-      previous?.focus();
-    };
-  }, [history]);
   const completed = useRef<string | null>(null);
   useEffect(() => {
     if (analysis?.status === 'succeeded' && completed.current !== analysis.id) {
@@ -142,6 +115,9 @@ export default function App() {
   const failure = error || session.error || detail.error || videos.error;
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        跳到内容
+      </a>
       <header className="app-header">
         <Brand />
         <nav>
@@ -165,7 +141,7 @@ export default function App() {
         hidden
         onChange={(e) => void onUpload(e.target.files?.[0])}
       />
-      <main>
+      <main id="main-content">
         {failure && (
           <div className="error-banner" role="alert">
             <span>
@@ -186,17 +162,19 @@ export default function App() {
         )}
         {uploading !== null ? (
           <section className="status-page" aria-live="polite">
-            <UploadSimple size={44} />
+            <UploadSimple size={44} aria-hidden="true" />
             <h1>{uploading < 100 ? '视频上传' : '视频校验'}</h1>
             <p>{uploading < 100 ? uploading + '%' : '即将分析'}</p>
-            <progress max="100" value={uploading} />
+            <Progress label="上传进度" value={uploading} max={100} />
             <p className="muted">上传期间请保持此页面打开</p>
           </section>
         ) : video && analysis?.status === 'succeeded' ? (
           <>
-            <div className="video-title">
-              <FilmStrip />
-              <h1>{video.title}</h1>
+            <div className="workspace-toolbar">
+              <div className="workspace-title">
+                <FilmStrip aria-hidden="true" />
+                <h1>{video.title}</h1>
+              </div>
             </div>
             <Player key={analysis.id} video={video} analysis={analysis} />
             <Notice messages={analysis.warnings} />
@@ -206,7 +184,7 @@ export default function App() {
           </>
         ) : video && analysis?.status === 'failed' ? (
           <section className="status-page">
-            <FilmStrip size={44} />
+            <FilmStrip size={44} aria-hidden="true" />
             <h1>分析失败</h1>
             <p>{analysis.error?.message || '请稍后重试'}</p>
             {analysis.error?.request_id && <small>问题编号 {analysis.error.request_id}</small>}
@@ -221,19 +199,23 @@ export default function App() {
         ) : video && analysis ? (
           <section className="status-page" aria-live="polite">
             <div className="activity">
-              <PingPong weight="fill" />
+              <PingPong weight="fill" aria-hidden="true" />
             </div>
             <h1>{stages[analysis.status] || '分析中'}</h1>
             <p>{video.title}</p>
             {analysis.progress && analysis.progress.total > 0 ? (
               <>
-                <progress value={analysis.progress.completed} max={analysis.progress.total} />
+                <Progress
+                  label="分析进度"
+                  value={analysis.progress.completed}
+                  max={analysis.progress.total}
+                />
                 <span>
                   {analysis.progress.completed} / {analysis.progress.total}
                 </span>
               </>
             ) : (
-              <span className="indeterminate" aria-label="分析进行中" />
+              <Progress label="分析进行中" />
             )}
             <p className="muted">可以离开页面，稍后从历史中查看结果</p>
           </section>
@@ -244,7 +226,7 @@ export default function App() {
         ) : (
           <section className="welcome">
             <div className="welcome-icon">
-              <PingPong weight="fill" />
+              <PingPong weight="fill" aria-hidden="true" />
             </div>
             <h1>每一回合，直接回看。</h1>
             <p>
@@ -278,52 +260,38 @@ export default function App() {
           onClick={() => input.current?.click()}
         />
       </footer>
-      {history && (
-        <div className="drawer-backdrop" onClick={() => setHistory(false)}>
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label="历史视频"
-            className="history-drawer"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="drawer-heading">
-              <h2>历史视频</h2>
-              <IconButton label="关闭历史" icon={X} onClick={() => setHistory(false)} />
-            </div>
-            <p className="muted">保留七天，仅此浏览器可见</p>
-            {videos.isLoading ? (
-              <p>读取中…</p>
-            ) : !videos.data?.items.length ? (
-              <p className="empty">还没有视频，开始第一次分析吧。</p>
-            ) : (
-              videos.data.items.map((v) => (
-                <button
-                  key={v.id}
-                  className={'history-item ' + (v.id === selected ? 'chosen' : '')}
-                  onClick={() => choose(v.id)}
-                >
-                  <span>
-                    <strong>{v.title}</strong>
-                    <small>
-                      {time(v.duration_s)} · {new Date(v.created_at).toLocaleDateString('zh-CN')}
-                    </small>
-                  </span>
-                  {v.latest_analysis?.status === 'succeeded' ? (
-                    <CheckCircle />
-                  ) : (
-                    <span className="history-status">
-                      {v.latest_analysis?.status === 'failed'
-                        ? '分析失败'
-                        : stages[v.latest_analysis?.status || ''] || '正在处理'}
-                    </span>
-                  )}
-                </button>
-              ))
-            )}
-          </section>
-        </div>
-      )}
+      <Dialog open={history} onClose={() => setHistory(false)} title="历史视频" side>
+        <p className="muted">保留七天，仅此浏览器可见</p>
+        {videos.isLoading ? (
+          <p>读取中…</p>
+        ) : !videos.data?.items.length ? (
+          <p className="empty">还没有视频，开始第一次分析吧。</p>
+        ) : (
+          videos.data.items.map((v) => (
+            <button
+              key={v.id}
+              className={'history-item ' + (v.id === selected ? 'chosen' : '')}
+              onClick={() => choose(v.id)}
+            >
+              <span>
+                <strong>{v.title}</strong>
+                <small>
+                  {time(v.duration_s)} · {new Date(v.created_at).toLocaleDateString('zh-CN')}
+                </small>
+              </span>
+              {v.latest_analysis?.status === 'succeeded' ? (
+                <CheckCircle aria-hidden="true" />
+              ) : (
+                <span className="history-status">
+                  {v.latest_analysis?.status === 'failed'
+                    ? '分析失败'
+                    : stages[v.latest_analysis?.status || ''] || '正在处理'}
+                </span>
+              )}
+            </button>
+          ))
+        )}
+      </Dialog>
     </div>
   );
 }

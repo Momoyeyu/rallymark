@@ -10,7 +10,8 @@ import {
   CornersOut,
 } from '@phosphor-icons/react';
 import { IconButton, AutoSwitch, Score } from '../ui/controls';
-import { RallyCard } from '../ui/RallyCard';
+import { RallyBrowser } from '../ui/RallyBrowser';
+import { Timeline } from '../ui/Timeline';
 import {
   PlaybackController,
   currentRally,
@@ -115,6 +116,14 @@ export default function Player({
             const duration = media.current?.duration;
             if (duration && Number.isFinite(duration)) onDuration?.(duration);
           }}
+          tabIndex={0}
+          aria-label={`${video.title}，按空格播放或暂停`}
+          onKeyDown={(event) => {
+            if (event.key === ' ' || event.key === 'Enter') {
+              event.preventDefault();
+              togglePlay();
+            }
+          }}
           playsInline
           preload="metadata"
           muted={muted}
@@ -212,37 +221,17 @@ export default function Player({
             onClick={() => navigate(1)}
           />
         </div>
-        <div className="seek-wrap">
-          <div className="rally-marks" aria-hidden="true">
-            {rallies.map((r) => (
-              <i
-                key={r.id}
-                style={{
-                  left: (r.start_s / video.duration_s) * 100 + '%',
-                  width: ((r.end_s - r.start_s) / video.duration_s) * 100 + '%',
-                }}
-              />
-            ))}
-          </div>
-          <input
-            aria-label="视频进度"
-            type="range"
-            min="0"
-            max={video.duration_s}
-            step=".05"
-            value={position}
-            onChange={(e) => {
-              const element = media.current;
-              if (!element) return;
-              execute(controller.manualSeek(Number(e.target.value), !element.paused));
-              record({ name: 'manual_seek', video_id: video.id });
-            }}
-          />
-        </div>
-        <div className="seek-times">
-          <span>{time(position)}</span>
-          <span>{time(video.duration_s)}</span>
-        </div>
+        <Timeline
+          position={position}
+          duration={video.duration_s}
+          rallies={rallies}
+          onSeek={(value) => {
+            const element = media.current;
+            if (!element) return;
+            execute(controller.manualSeek(value, !element.paused));
+            record({ name: 'manual_seek', video_id: video.id });
+          }}
+        />
         <div className="player-feedback" aria-live="polite">
           {error && (
             <p className="error" role="alert">
@@ -251,27 +240,21 @@ export default function Player({
           )}
           {!error && rallies.length === 0 && <p className="muted">暂无回合，可自由播放</p>}
         </div>
-        <div className={'rally-strip' + (local ? ' local-rallies' : '')} aria-label="回合列表">
-          {rallies.map((r, i) => (
-            <RallyCard
-              key={r.id}
-              rally={r}
-              index={i}
-              hasScores={hasScores}
-              selected={i === active}
-              duration={time(r.end_s - r.start_s)}
-              thumbnail={
-                local
-                  ? undefined
-                  : `/api/v1/videos/${video.id}/rallies/${r.id}/thumbnail?analysis_id=${analysis.id}`
-              }
-              onSelect={() => {
-                execute(controller.select(i));
-                record({ name: 'rally_navigation', video_id: video.id, properties: { index: i } });
-              }}
-            />
-          ))}
-        </div>
+        <RallyBrowser
+          rallies={rallies}
+          active={active}
+          hasScores={hasScores}
+          thumbnail={
+            local
+              ? undefined
+              : (r) =>
+                  `/api/v1/videos/${video.id}/rallies/${r.id}/thumbnail?analysis_id=${analysis.id}`
+          }
+          onSelect={(index) => {
+            execute(controller.select(index));
+            record({ name: 'rally_navigation', video_id: video.id, properties: { index } });
+          }}
+        />
       </div>
     </section>
   );

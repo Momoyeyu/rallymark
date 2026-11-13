@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { GearSix, X, Trash } from '@phosphor-icons/react';
-import { IconButton } from './ui/controls';
+import { GearSix, FilmStrip, Trash } from '@phosphor-icons/react';
+import { IconButton, ActionButton } from './ui/controls';
+import { Select } from './ui/Select';
+import { Dialog } from './ui/Dialog';
+import { FilePicker } from './ui/FilePicker';
+import { time } from './player/time';
 import { Brand } from './ui/Brand';
 import { Notice } from './ui/Notice';
 import Player from './player/Player';
@@ -23,7 +27,10 @@ const timestamp = '2000-01-01T00:00:00Z';
 export default function LocalReview() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [selected, setSelected] = useState('');
-  const [configOpen, setConfigOpen] = useState(true);
+  const [configOpen, setConfigOpen] = useState(
+    !new URLSearchParams(location.search).has('preview'),
+  );
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const urls = useRef(new Set<string>());
   const entry = clips.find((clip) => clip.id === selected);
   useEffect(() => {
@@ -53,7 +60,13 @@ export default function LocalReview() {
           }),
         );
         setClips(ready);
-        setSelected(ready.find((clip) => clip.id === 'nina')?.id ?? ready[0]?.id ?? '');
+        const saved = new URLSearchParams(location.search).get('clip');
+        setSelected(
+          ready.find((clip) => clip.id === saved)?.id ??
+            ready.find((clip) => clip.id === 'nina')?.id ??
+            ready[0]?.id ??
+            '',
+        );
         setConfigOpen(false);
       })
       .catch((error) => {
@@ -144,104 +157,72 @@ export default function LocalReview() {
           latest_analysis: analysis,
         }
       : undefined;
+  function chooseClip(id: string) {
+    setSelected(id);
+    setConfirmRemove(false);
+    setConfigOpen(!clips.find((clip) => clip.id === id)?.metadata);
+    const url = new URL(location.href);
+    url.searchParams.set('clip', id);
+    window.history.replaceState({}, '', url);
+  }
+  function removeClip() {
+    if (!entry) return;
+    URL.revokeObjectURL(entry.url);
+    urls.current.delete(entry.url);
+    const next = clips.find((clip) => clip.id !== entry.id);
+    setClips((previous) => previous.filter((clip) => clip.id !== entry.id));
+    setSelected(next?.id ?? '');
+    setConfirmRemove(false);
+    setConfigOpen(!next?.metadata);
+  }
   return (
     <div className="app-shell local-review">
+      <a className="skip-link" href="#main-content">
+        跳到内容
+      </a>
       <header className="app-header">
         <Brand href="?local=1&preview=1" />
-        <span className="muted">本地复盘</span>
+        <span className="context-badge">本地复盘</span>
       </header>
-      <main>
-        <section className="local-files" aria-label="本地文件">
-          {clips.length > 0 && (
-            <div className="local-current">
-              <label>
-                当前视频
-                <select
-                  aria-label="当前视频"
-                  value={selected}
-                  onChange={(event) => {
-                    const id = event.target.value;
-                    setSelected(id);
-                    setConfigOpen(!clips.find((clip) => clip.id === id)?.metadata);
-                  }}
-                >
-                  {clips.map((clip, index) => (
-                    <option key={clip.id} value={clip.id}>
-                      {index + 1}. {clip.file.name}
-                      {clip.metadata ? ' · 已载入回合' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <IconButton
-                label="本地文件设置"
-                icon={configOpen ? X : GearSix}
-                aria-expanded={configOpen}
-                aria-controls="local-file-config"
-                onClick={() => setConfigOpen(!configOpen)}
-              />
-            </div>
-          )}
-          <div id="local-file-config" className="local-config" hidden={!configOpen}>
-            <h1>打开原视频与分析 JSON</h1>
-            <p className="muted">
-              文件仅在此浏览器读取，无需上传、API 或 GPU。可添加多段视频，分别选择对应
-              JSON；刷新后需重新选择。
-            </p>
-            <label>
-              原视频（可多选）
-              <input
-                type="file"
-                accept="video/*,.mp4,.mov,.m4v,.webm"
-                multiple
-                onChange={(event) => {
-                  addVideos(event.target.files);
-                  event.target.value = '';
-                }}
-              />
-            </label>
-            {clips.length > 0 && (
-              <>
-                <label>
-                  此视频的分析 JSON
-                  <input
-                    key={selected}
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={(event) => {
-                      void addMetadata(event.target.files?.[0]);
-                      event.target.value = '';
-                    }}
-                  />
-                </label>
-                {entry?.metadataName && (
-                  <p className="muted">
-                    {entry.metadataName} · {metadata?.rallies.length ?? 0} 个回合
-                  </p>
-                )}
-                <IconButton
-                  label="移除此视频"
-                  icon={Trash}
-                  onClick={() => {
-                    if (!entry) return;
-                    URL.revokeObjectURL(entry.url);
-                    urls.current.delete(entry.url);
-                    const next = clips.find((clip) => clip.id !== entry.id);
-                    setClips((previous) => previous.filter((clip) => clip.id !== entry.id));
-                    setSelected(next?.id ?? '');
-                    setConfigOpen(!next?.metadata);
-                  }}
-                />
-              </>
-            )}
+      <main id="main-content">
+        <div className="workspace-toolbar">
+          <div className="workspace-title">
+            <FilmStrip aria-hidden="true" />
+            <h1>{metadata?.title || entry?.file.name || '本地复盘'}</h1>
           </div>
-        </section>
+          <section className="workspace-actions" aria-label="本地文件">
+            {clips.length > 0 && (
+              <Select
+                label="当前视频"
+                value={selected}
+                options={clips.map((clip) => ({
+                  value: clip.id,
+                  label: clip.metadata?.title || clip.file.name,
+                  detail: clip.metadata
+                    ? `${clip.metadata.rallies.length} 回合 / ${time(clip.metadata.duration_s || clip.duration || 0)}`
+                    : '待载入',
+                }))}
+                onChange={chooseClip}
+              />
+            )}
+            <IconButton
+              tone="surface"
+              label="本地文件设置"
+              icon={GearSix}
+              aria-expanded={configOpen}
+              onClick={() => {
+                setConfirmRemove(false);
+                setConfigOpen(true);
+              }}
+            />
+          </section>
+        </div>
         {previewError && (
           <p role="alert" className="error-banner">
-            {previewError}
+            {previewError}，请重启本地预览服务。
           </p>
         )}
-        {entry?.error && (
+        {entry?.error && !configOpen && (
           <p role="alert" className="error-banner">
             {entry.error}
           </p>
@@ -256,11 +237,8 @@ export default function LocalReview() {
             {mismatch}
           </p>
         )}
-        {video && analysis && entry && !outside && !mismatch && (
+        {video && analysis && entry && !outside && !mismatch ? (
           <>
-            <div className="video-title">
-              <h1>{video.title}</h1>
-            </div>
             <Player
               key={analysis.id}
               video={video}
@@ -268,18 +246,79 @@ export default function LocalReview() {
               local
               mediaSrc={entry.url}
               onDuration={(actual) => {
-                if (entry.duration === actual) return;
-                setClips((previous) =>
-                  previous.map((clip) =>
-                    clip.id === entry.id ? { ...clip, duration: actual } : clip,
-                  ),
-                );
+                if (entry.duration !== actual)
+                  setClips((previous) =>
+                    previous.map((clip) =>
+                      clip.id === entry.id ? { ...clip, duration: actual } : clip,
+                    ),
+                  );
               }}
             />
             <Notice messages={analysis.warnings} />
           </>
+        ) : (
+          !configOpen && (
+            <section className="welcome">
+              <FilmStrip className="empty-icon" aria-hidden="true" />
+              <h2>
+                {new URLSearchParams(location.search).has('preview') && !previewError
+                  ? '读取视频…'
+                  : '添加视频'}
+              </h2>
+              <p>选择原片与分析数据，直接复盘。</p>
+              <ActionButton icon={GearSix} label="选择文件" onClick={() => setConfigOpen(true)} />
+            </section>
+          )
         )}
       </main>
+      <Dialog open={configOpen} onClose={() => setConfigOpen(false)} title="本地文件">
+        <p className="muted">文件仅在本机读取，不会上传。</p>
+        <FilePicker
+          label="原视频（可多选）"
+          accept="video/*,.mp4,.mov,.m4v,.webm"
+          multiple
+          description={clips.length ? `${clips.length} 段已载入` : 'MP4 / MOV / WebM'}
+          onChange={addVideos}
+        />
+        {entry && (
+          <>
+            <FilePicker
+              key={selected}
+              label="此视频的分析 JSON"
+              accept="application/json,.json"
+              description={entry.metadataName || entry.file.name}
+              onChange={(files) => void addMetadata(files?.[0])}
+            />
+            {entry.error && (
+              <p className="inline-error" role="alert">
+                {entry.error}，请重新选择 JSON。
+              </p>
+            )}
+            <div className="dialog-footer">
+              {confirmRemove ? (
+                <>
+                  <span className="muted">从复盘列表移除？原文件不会删除。</span>
+                  <div className="button-row">
+                    <ActionButton
+                      icon={GearSix}
+                      label="保留"
+                      onClick={() => setConfirmRemove(false)}
+                    />
+                    <ActionButton icon={Trash} label="移除" tone="danger" onClick={removeClip} />
+                  </div>
+                </>
+              ) : (
+                <ActionButton
+                  icon={Trash}
+                  label="移除此视频"
+                  tone="danger"
+                  onClick={() => setConfirmRemove(true)}
+                />
+              )}
+            </div>
+          </>
+        )}
+      </Dialog>
     </div>
   );
 }
