@@ -80,3 +80,36 @@ uv run scripts/experiments/plot_grid.py \
 Before releasing rented compute, verify video checksums and all raw/calibrated completion markers locally, archive raw predictions, sources, GT, grid, selected parameters and exported metadata, then drain and release the instance. Video files and generated raw data remain outside Git; curated reports belong under `docs/<date>-<sequence>/`.
 
 An explicitly chosen operating point from the completed grid can also be exported with `--policy custom --top-k 200 --nearby-seconds 2`. Both values must belong to the evaluated grid. This is a manual, potentially post-hoc choice; it is not a new held-out policy estimate. Preserve alternate exports in separate directories before overwriting `review/`.
+
+## Omission-first expanded search
+
+The follow-up [six-match study](../../docs/20261113-002/report.md) separates the unchanged-rule search from an experimental protected-orphan rule. Production postprocessing and deployment defaults are not changed.
+
+```sh
+services/algorithm/.venv/bin/python scripts/experiments/search_extended.py \
+  --input .runtime/experiments/20261113-001 \
+  --output .runtime/experiments/20261113-002/unchanged
+
+services/algorithm/.venv/bin/python scripts/experiments/search_guarded.py \
+  --input .runtime/experiments/20261113-001 \
+  --output .runtime/experiments/20261113-002/guarded
+```
+
+`search_extended.py` uses the same production merge helpers, broadens Top-N to1…200 and distance to1…30s, and ranks misses before false rallies. It caches interval-equivalent metric calculations. The original 37,962 rows were checked against the old grid, with all metrics equal within1e-12.
+
+`search_guarded.py` adds a minimum duration for TAD-only orphans and protection for merged orphans containing any global top-M TAD member. Protected orphans bypass nearby exclusion, after the duration check. OCR and mixed intervals are unchanged. Inputs never include GT inside either fusion function. The selection constraint requires every previously covered GT-positive second to remain covered and each video's IoU0.3/0.5 FN not to increase. Among feasible configurations, omissions/FN precede FP in the ranking. These constraints apply only to evaluation/selection, not to inference on a new video.
+
+Use `--refine` for the declared local N/M/duration grid, then `--confirm` for N200, every M0…200, quarter-second distances1…30 plus45/60/600, and quarter-second minimum durations0…2. The600s sentinel tests suppression of all unprotected orphans in these videos. Each phase writes all rows, its protocol and input/source hashes, a summary with training-only selection folds, and score-enriched metadata. Completion is published after exports.
+
+The omission-first operational comparison fixes the minimum duration to0.5s and uses integer distances. It reuses confirmation rows rather than rerunning fusion:
+
+```sh
+services/algorithm/.venv/bin/python scripts/experiments/search_guarded.py \
+  --input .runtime/experiments/20261113-001 \
+  --output .runtime/experiments/20261113-002/conservative \
+  --conservative-from .runtime/experiments/20261113-002/confirmation/grid.csv
+```
+
+This validates completion and identical input provenance before rescreening. Phase modes are mutually exclusive. Metadata directories `review-no_regression/`, `review-long_gap/`, and `review-counts_only/` are written beside each phase's output directory; preserve prior exports before the next phase overwrites them. The study keeps final operational metadata in `review/` and the more aggressive duration filter in `review-fewer-false/`.
+
+Do not interpret the fixed-rule leave-one-video-out checks as an untouched test set: method design and refinement ranges have already been informed by these six matches. The report records the observed failure of aggressive duration tuning and the conservative restriction adopted afterward.

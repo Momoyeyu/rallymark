@@ -32,7 +32,7 @@ python:
     - cd services/api && uv sync --frozen && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
     - cd ../algorithm && uv sync --frozen && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
     - cd ../.. && services/algorithm/.venv/bin/ruff check scripts/experiments && services/algorithm/.venv/bin/ruff format --check scripts/experiments
-    - services/algorithm/.venv/bin/python -m pytest scripts/experiments/tests/test_evaluate_grid.py -q
+    - services/algorithm/.venv/bin/python -m pytest scripts/experiments/tests -q
   cache:
     key: python-locks
     paths: [.cache/uv/, .cache/python/]

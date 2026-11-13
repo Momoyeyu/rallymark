@@ -35,7 +35,7 @@ def main():
     web = ROOT / "apps/web"
     algorithm_python = ROOT / "services/algorithm/.venv/bin/python"
     if args.tests:
-        run([str(algorithm_python), "-m", "pytest", "scripts/experiments/tests/test_evaluate_grid.py", "-q"], ROOT)
+        run([str(algorithm_python), "-m", "pytest", "scripts/experiments/tests", "-q"], ROOT)
     else:
         ruff = str(ROOT / "services/algorithm/.venv/bin/ruff")
         run([ruff, "check", "scripts/experiments"], ROOT)

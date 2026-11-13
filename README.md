@@ -21,6 +21,8 @@ The development Compose stack uses a fake algorithm runner. It requires Docker C
 
 For playback with existing original videos and analysis JSON, use [local review](apps/web/LOCAL_REVIEW.md). Only the web application runs; no API or GPU is required. [Offline evaluation](scripts/experiments/README.md) documents reproducible parameter searches.
 
+The [omission-first follow-up](docs/20261113-002/report.md) tests longer exclusion distances with protected TAD candidates and preserves GPU-free review metadata.
+
 The [six-match parameter experiment](docs/20261113-001/report.md) records recall/F1 tradeoffs, held-out parameter selection, known boundary failures, and the local review data layout.
 
 ## Structure
