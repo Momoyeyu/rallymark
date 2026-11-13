@@ -19,6 +19,8 @@ make test
 
 The development Compose stack uses a fake algorithm runner. It requires Docker Compose 2.24.4 or newer. Run make help for commands. Choose the SSH deployment target in .runtime/target.env and the target's GPU and paths in its .runtime/deploy.env. Use make deploy VERSION=<commit-sha> to build and deploy on that host. Follow [operations](docs/operations.md) for setup, migration, cleanup, backup and rollback.
 
+For playback with existing original videos and analysis JSON, use [local review](apps/web/LOCAL_REVIEW.md). Only the web application runs; no API or GPU is required. [Offline evaluation](scripts/experiments/README.md) documents reproducible parameter searches.
+
 ## Structure
 
 | Directory | Responsibility |

@@ -108,3 +108,120 @@ test('a mobile user navigates original video and disables auto-skip by dragging'
   await page.getByRole('button', { name: '历史视频' }).click();
   await expect(page.getByRole('dialog', { name: '历史视频' })).toBeVisible();
 });
+
+test('local review uses six independent originals and metadata without API requests', async ({
+  page,
+}, testInfo) => {
+  const apiRequests: string[] = [];
+  await page.route('**/api/**', (route) => {
+    apiRequests.push(route.request().url());
+    return route.abort();
+  });
+  await page.goto('/?local=1');
+  await page.getByLabel('原视频（可多选）', { exact: true }).setInputFiles(
+    Array.from({ length: 6 }, (_, i) => ({
+      name: `match-${i + 1}.mp4`,
+      mimeType: 'video/mp4',
+      buffer: media,
+    })),
+  );
+  const select = page.getByLabel('当前视频', { exact: true });
+  await expect(select.locator('option')).toHaveCount(6);
+  const options = await select
+    .locator('option')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+  for (let i = 0; i < options.length; i++) {
+    await select.selectOption(options[i]);
+    await page.getByLabel('此视频的分析 JSON', { exact: true }).setInputFiles({
+      name: `match-${i + 1}.json`,
+      mimeType: 'application/json',
+      buffer: Buffer.from(
+        JSON.stringify({
+          rallies: [
+            { start_s: 1, end_s: 2, score: `${i}:0`, score_status: 'observed' },
+            { start_s: 5, end_s: 7, score: `${i + 1}:0`, score_status: 'inferred' },
+          ],
+        }),
+      ),
+    });
+    await expect(
+      page.getByRole('button', { name: `跳转回合 1 比分 ${i}:0`, exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: '本地文件设置', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(page.getByLabel('原视频（可多选）', { exact: true })).toBeHidden();
+    await expect(select).toBeVisible();
+  }
+  await select.selectOption(options[0]);
+  await expect(
+    page.getByRole('button', { name: '跳转回合 1 比分 0:0', exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() => page.locator('video').evaluate((v) => (v as HTMLVideoElement).readyState))
+    .toBeGreaterThanOrEqual(2);
+  const progressBounds = await page.getByLabel('视频进度', { exact: true }).boundingBox();
+  expect(progressBounds!.y + progressBounds!.height).toBeLessThan(844);
+  await page.screenshot({ path: testInfo.outputPath('local-review-compact.png') });
+  await page.getByRole('button', { name: '播放', exact: true }).click();
+  await expect
+    .poll(() => page.locator('video').evaluate((v) => (v as HTMLVideoElement).currentTime), {
+      timeout: 7000,
+    })
+    .toBeGreaterThanOrEqual(5);
+  await page.getByLabel('视频进度', { exact: true }).fill('3');
+  await expect(page.getByRole('switch', { name: '自动跳转' })).not.toBeChecked();
+  await page.getByRole('button', { name: '下一回合' }).click();
+  await expect
+    .poll(() => page.locator('video').evaluate((v) => (v as HTMLVideoElement).currentTime))
+    .toBeGreaterThanOrEqual(5);
+  await page.getByRole('button', { name: '上一回合' }).click();
+  await expect
+    .poll(() => page.locator('video').evaluate((v) => (v as HTMLVideoElement).currentTime))
+    .toBeLessThan(3);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+  ).toBeTruthy();
+  await page.getByRole('button', { name: '本地文件设置', exact: true }).click();
+  await expect(page.getByLabel('此视频的分析 JSON', { exact: true })).toBeVisible();
+  await page.getByLabel('此视频的分析 JSON', { exact: true }).setInputFiles({
+    name: 'invalid.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ rallies: [{ start_s: -1, end_s: 2 }] })),
+  });
+  await expect(page.getByRole('alert')).toContainText('时间无效');
+  await expect(page.locator('video')).toHaveCount(0);
+  await page.getByLabel('此视频的分析 JSON', { exact: true }).setInputFiles({
+    name: 'wrong-video.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ rallies: [{ start_s: 15, end_s: 20 }] })),
+  });
+  await expect(page.getByRole('alert')).toContainText('超过原视频时长');
+  await expect(page.locator('video')).toHaveCount(0);
+  await page.getByRole('button', { name: '本地文件设置', exact: true }).click();
+  await page.getByLabel('此视频的分析 JSON', { exact: true }).setInputFiles({
+    name: 'wrong-size.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({ source_size_bytes: media.length + 1, rallies: [{ start_s: 1, end_s: 2 }] }),
+    ),
+  });
+  await expect(page.getByRole('alert')).toContainText('文件大小');
+  await expect(page.locator('video')).toHaveCount(0);
+  await page.getByRole('button', { name: '本地文件设置', exact: true }).click();
+  await page.getByLabel('此视频的分析 JSON', { exact: true }).setInputFiles({
+    name: 'wrong-duration.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        duration_s: 13,
+        source_size_bytes: media.length,
+        rallies: [{ start_s: 1, end_s: 2 }],
+      }),
+    ),
+  });
+  await expect(page.getByRole('alert')).toContainText('时长与分析 JSON 不一致');
+  await expect(page.locator('video')).toHaveCount(0);
+  expect(apiRequests).toEqual([]);
+});

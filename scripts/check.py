@@ -33,6 +33,13 @@ def main():
             run(["uv", "run", "ruff", "check", "."], directory)
             run(["uv", "run", "ruff", "format", "--check", "."], directory)
     web = ROOT / "apps/web"
+    algorithm_python = ROOT / "services/algorithm/.venv/bin/python"
+    if args.tests:
+        run([str(algorithm_python), "-m", "pytest", "scripts/experiments/tests/test_evaluate_grid.py", "-q"], ROOT)
+    else:
+        ruff = str(ROOT / "services/algorithm/.venv/bin/ruff")
+        run([ruff, "check", "scripts/experiments"], ROOT)
+        run([ruff, "format", "--check", "scripts/experiments"], ROOT)
     run(["pnpm", "install", "--frozen-lockfile"], web)
     run(["pnpm", "test" if args.tests else "check"], web)
     if not args.tests:

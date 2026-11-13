@@ -27,7 +27,22 @@ export const time = (seconds: number) =>
 export function scoreLabel(rally: Rally, index: number, hasScores: boolean) {
   return hasScores ? rally.score || '比分待确认' : String(index + 1).padStart(2, '0');
 }
-export default function Player({ video, analysis }: { video: Video; analysis: Analysis }) {
+export default function Player({
+  video,
+  analysis,
+  mediaSrc,
+  posterSrc,
+  local = false,
+  onDuration,
+}: {
+  video: Video;
+  analysis: Analysis;
+  mediaSrc?: string;
+  posterSrc?: string;
+  local?: boolean;
+  onDuration?: (duration: number) => void;
+}) {
+  const record: typeof track = local ? () => {} : track;
   const media = useRef<HTMLVideoElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const sequence = useRef(0);
@@ -76,7 +91,7 @@ export default function Player({ video, analysis }: { video: Video; analysis: An
   }, [controller]);
   const navigate = (direction: -1 | 1) => {
     execute(controller.navigate(media.current?.currentTime || 0, direction));
-    track({ name: 'rally_navigation', video_id: video.id, properties: { direction } });
+    record({ name: 'rally_navigation', video_id: video.id, properties: { direction } });
   };
   const togglePlay = () => {
     const element = media.current;
@@ -102,8 +117,12 @@ export default function Player({ video, analysis }: { video: Video; analysis: An
       <div className="video-stage">
         <video
           ref={media}
-          src={'/api/v1/videos/' + video.id + '/media'}
-          poster={'/api/v1/videos/' + video.id + '/poster'}
+          src={mediaSrc ?? '/api/v1/videos/' + video.id + '/media'}
+          poster={local ? posterSrc : (posterSrc ?? '/api/v1/videos/' + video.id + '/poster')}
+          onLoadedMetadata={() => {
+            const duration = media.current?.duration;
+            if (duration && Number.isFinite(duration)) onDuration?.(duration);
+          }}
           playsInline
           preload="metadata"
           muted={muted}
@@ -115,7 +134,7 @@ export default function Player({ video, analysis }: { video: Video; analysis: An
             if (!programmaticSeek.current && media.current) {
               controller.manualSeek(media.current.currentTime, !media.current.paused);
               setAutomatic(false);
-              track({ name: 'manual_seek', video_id: video.id });
+              record({ name: 'manual_seek', video_id: video.id });
             }
           }}
           onSeeked={() => {
@@ -124,7 +143,7 @@ export default function Player({ video, analysis }: { video: Video; analysis: An
           onCanPlay={() => setBuffering(false)}
           onError={() => {
             setError('视频加载失败，请刷新重试');
-            track({ name: 'playback_error', video_id: video.id });
+            record({ name: 'playback_error', video_id: video.id });
           }}
           onTimeUpdate={() => {
             const e = media.current;
@@ -176,7 +195,7 @@ export default function Player({ video, analysis }: { video: Video; analysis: An
             aria-label="自动跳转"
             onClick={() => {
               execute(controller.toggle(media.current?.currentTime || 0));
-              track({
+              record({
                 name: 'auto_skip_changed',
                 video_id: video.id,
                 properties: { enabled: controller.automatic },
@@ -231,7 +250,7 @@ export default function Player({ video, analysis }: { video: Video; analysis: An
               const element = media.current;
               if (!element) return;
               execute(controller.manualSeek(Number(e.target.value), !element.paused));
-              track({ name: 'manual_seek', video_id: video.id });
+              record({ name: 'manual_seek', video_id: video.id });
             }}
           />
         </div>
@@ -245,7 +264,7 @@ export default function Player({ video, analysis }: { video: Video; analysis: An
           </p>
         )}
         {rallies.length === 0 && <p className="notice">未识别到回合，可拖动时间轴查看原视频。</p>}
-        <div className="rally-strip" aria-label="回合列表">
+        <div className={'rally-strip' + (local ? ' local-rallies' : '')} aria-label="回合列表">
           {rallies.map((r, i) => (
             <button
               key={r.id}
@@ -253,21 +272,23 @@ export default function Player({ video, analysis }: { video: Video; analysis: An
               aria-label={'跳转回合 ' + (i + 1) + (r.score ? ' 比分 ' + r.score : '')}
               onClick={() => {
                 execute(controller.select(i));
-                track({ name: 'rally_navigation', video_id: video.id, properties: { index: i } });
+                record({ name: 'rally_navigation', video_id: video.id, properties: { index: i } });
               }}
             >
-              <img
-                loading="lazy"
-                alt=""
-                src={
-                  '/api/v1/videos/' +
-                  video.id +
-                  '/rallies/' +
-                  r.id +
-                  '/thumbnail?analysis_id=' +
-                  analysis.id
-                }
-              />
+              {!local && (
+                <img
+                  loading="lazy"
+                  alt=""
+                  src={
+                    '/api/v1/videos/' +
+                    video.id +
+                    '/rallies/' +
+                    r.id +
+                    '/thumbnail?analysis_id=' +
+                    analysis.id
+                  }
+                />
+              )}
               <span>{time(r.end_s - r.start_s)}</span>
               <strong>{scoreLabel(r, i, hasScores)}</strong>
               {r.score_status === 'inferred' && <small>推断</small>}
