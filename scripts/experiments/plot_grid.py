@@ -28,9 +28,9 @@ def main():
     ks = sorted({int(r["top_k"]) for r in rows})
     gaps = sorted({float(r["nearby_seconds"]) for r in rows})
     panels = [
-        ("selection_f2", "Combined F2 (macro)", "viridis", 0, 1),
-        ("event_05_f1", "Rally F1 / IoU >= 0.5 (macro)", "viridis", 0, 1),
-        ("duration_recall", "Duration recall (macro)", "viridis", 0, 1),
+        ("selection_f2", "Combined F2 (macro)", "viridis", None, None),
+        ("event_05_f1", "Rally F1 / IoU >= 0.5 (macro)", "viridis", None, None),
+        ("duration_recall", "Duration recall (macro)", "viridis", None, None),
         (
             "coverage_05_missed_rounds",
             "Rallies with <50% coverage (total)",
@@ -71,7 +71,7 @@ def main():
         ax.set(title=title, xlabel="Orphan neighborhood (s)", ylabel="TAD Top-N")
         fig.colorbar(picture, ax=ax, shrink=0.9)
     fig.suptitle(
-        "Six matches: 6,327 configurations | red cross: recall-priority selection"
+        f"{len(summary['videos'])} matches: {len(ks) * len(gaps):,} configurations | red cross: recall-priority selection"
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.output, dpi=180)

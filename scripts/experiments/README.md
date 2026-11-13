@@ -77,4 +77,6 @@ uv run scripts/experiments/plot_grid.py \
   --output .runtime/experiments/20261113-001/results/parameter-grid.png
 ```
 
-Before releasing rented compute, verify video checksums and all raw/calibrated completion markers locally, archive raw predictions, sources, GT, grid, selected parameters and exported metadata, then drain and release the instance. Video files and generated raw data remain outside Git; curated reports belong under `docs/experiments/<date>-<sequence>/`.
+Before releasing rented compute, verify video checksums and all raw/calibrated completion markers locally, archive raw predictions, sources, GT, grid, selected parameters and exported metadata, then drain and release the instance. Video files and generated raw data remain outside Git; curated reports belong under `docs/<date>-<sequence>/`.
+
+An explicitly chosen operating point from the completed grid can also be exported with `--policy custom --top-k 200 --nearby-seconds 2`. Both values must belong to the evaluated grid. This is a manual, potentially post-hoc choice; it is not a new held-out policy estimate. Preserve alternate exports in separate directories before overwriting `review/`.

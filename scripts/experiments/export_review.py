@@ -18,16 +18,31 @@ def main():
             "in_sample_best",
             "best_f1_alternative",
             "recall_priority_alternative",
+            "custom",
         ],
         required=True,
     )
+    parser.add_argument("--top-k", type=int)
+    parser.add_argument("--nearby-seconds", type=float)
     args = parser.parse_args()
     summary_path = args.evaluation / "summary.json"
     marker = json.loads((args.evaluation / "complete.json").read_text())
     if marker["summary_sha256"] != sha256(summary_path):
         raise ValueError("Evaluation is incomplete or summary was modified")
     summary = json.loads(summary_path.read_text())
-    parameters = summary[args.policy]["parameters"]
+    if args.policy == "custom":
+        grid = summary["grid"]
+        if (
+            args.top_k is None
+            or not grid["top_k_min"] <= args.top_k <= grid["top_k_max"]
+            or args.nearby_seconds not in grid["nearby_seconds"]
+        ):
+            parser.error("Custom parameters must both belong to the completed grid")
+        parameters = {"top_k": args.top_k, "nearby_seconds": args.nearby_seconds}
+    else:
+        if args.top_k is not None or args.nearby_seconds is not None:
+            parser.error("Parameter overrides require --policy custom")
+        parameters = summary[args.policy]["parameters"]
     for key, path in {
         "postprocess": ROOT
         / "services/algorithm/vendor/ftt/code/postprocess_rallies.py",
