@@ -1,6 +1,8 @@
-# Local review without backend services
+# Development-only local review
 
-Run only the web application on the Mac (Node.js and pnpm required):
+Local file import and preloaded experiments are development tools. Production builds exclude their entry, component, styles and data endpoints; `pnpm build` checks the generated assets. Normal production use uploads videos to the business API.
+
+Run only the web application (Node.js and pnpm required):
 
 ```sh
 cd apps/web
@@ -12,7 +14,19 @@ Open `http://127.0.0.1:5173/?local=1`. No API, PostgreSQL or GPU process is requ
 
 Select one or more original videos, then select each video's analysis JSON from the current-video menu. After a JSON is accepted, file settings collapse so the player and transport controls fit on a phone screen. The compact current-video selector stays visible; select an unconfigured video to reopen the form, or use the file-settings button to add/remove originals and replace JSON. Six or more videos can be loaded independently. Files stay in the browser: media uses object URLs, metadata uses File.text(), and local playback sends no API requests or tracking events. Select matching original videos; no new inference runs on the Mac. Browser-supported media such as MP4/H.264 is recommended.
 
-Previous/next, rally selection, scores, automatic gap skipping, and manual seeking use the same player and state machine as server mode. Manual seeking disables automatic skipping. Local rally cards show scores and durations without server thumbnail requests. Loaded files and metadata are held in memory; refreshing requires selecting them again. Removing a video or leaving the page releases its object URL.
+Previous/next, rally selection, scores, automatic gap skipping, and manual seeking use the same player and state machine as server mode. Manual seeking disables automatic skipping. Local rally cards show scores and durations without server thumbnail requests. With manual imports, loaded files and metadata are held in memory; refreshing requires selecting them again. Removing a video or leaving the page releases its object URL.
+
+## Preloaded experiments
+
+From the repository root, this starts a loopback-only preview with all six original videos and the latest score-constrained metadata already paired:
+
+```sh
+cd apps/web
+RALLYMARK_PREVIEW_DATA=../../.runtime/experiments/20261113-003 \
+  pnpm dev --host 127.0.0.1 --port 5174 --strictPort
+```
+
+Open `http://127.0.0.1:5174/?local=1&preview=1`. The current-video selector contains all six clips; refreshing automatically reloads them. The optional data plugin runs only with `vite serve`, requires the explicit directory and loopback host, serves only IDs from the result manifest, and supports Range video requests. It does not create sessions, upload files, call the business API or run inference. Do not configure this environment variable in production.
 
 A compact metadata file is:
 

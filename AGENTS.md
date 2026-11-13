@@ -11,3 +11,6 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
 - Deployment uses immutable version tags. Retain previous versions and drain running work before changing services. Do not remove data volumes to troubleshoot.
 - Select hosts through .runtime/target.env and GPU devices through the target's .runtime/deploy.env. Never restrict inference to a GPU model name or commit a machine's GPU UUID. Verify real CUDA inference after hardware changes.
 - Add abstractions only for an actual repeated behavior. Keep comments for non-obvious constraints, and keep a single source of truth for documentation.
+
+- Reuse web UI primitives in apps/web/src/ui. Icon controls keep accessible names and at least 44px touch targets. Scores and counters use stable dimensions and tabular numbers; inferred/unknown states use graphics and compact labels rather than changing-length prose.
+- Local import and experiment preloading are development-only. Keep their lazy entry behind import.meta.env.DEV; pnpm build must verify no debug UI or data endpoint leaks into production assets.

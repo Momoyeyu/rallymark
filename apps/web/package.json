@@ -6,9 +6,9 @@
   "packageManager": "pnpm@10.20.0",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "check": "prettier --check src tests vite.config.ts vitest.config.ts playwright.config.ts && tsc --noEmit",
+    "check": "prettier --check src tests dev scripts vite.config.ts vitest.config.ts playwright.config.ts && tsc --noEmit",
     "test": "vitest run",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/check-production.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",

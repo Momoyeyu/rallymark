@@ -9,7 +9,11 @@ import {
   CheckCircle,
   FilmStrip,
 } from '@phosphor-icons/react';
-import Player, { time } from './player/Player';
+import Player from './player/Player';
+import { time } from './player/time';
+import { IconButton, ActionButton } from './ui/controls';
+import { Brand } from './ui/Brand';
+import { Notice } from './ui/Notice';
 import { ApiError, request, upload, track, type Video } from './api';
 
 const stages: Record<string, string> = {
@@ -139,23 +143,19 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <a href="/" className="brand" aria-label="RallyMark 首页">
-          <PingPong weight="fill" />
-          <span>
-            Rally<span>Mark</span>
-          </span>
-        </a>
+        <Brand />
         <nav>
-          <button aria-label="历史视频" onClick={() => setHistory(true)}>
-            <ClockCounterClockwise />
-          </button>
-          <button
-            aria-label="上传视频"
+          <IconButton
+            label="历史视频"
+            icon={ClockCounterClockwise}
+            onClick={() => setHistory(true)}
+          />
+          <IconButton
+            label="上传视频"
+            icon={UploadSimple}
             disabled={!session.isSuccess || uploading !== null}
             onClick={() => input.current?.click()}
-          >
-            <UploadSimple />
-          </button>
+          />
         </nav>
       </header>
       <input
@@ -174,22 +174,21 @@ export default function App() {
                 <small>问题编号 {failure.requestId}</small>
               )}
             </span>
-            <button
-              aria-label="重新连接"
+            <IconButton
+              icon={ArrowClockwise}
+              label="重新连接"
               onClick={() => {
                 setError(null);
                 void client.invalidateQueries();
               }}
-            >
-              <ArrowClockwise />
-            </button>
+            />
           </div>
         )}
         {uploading !== null ? (
           <section className="status-page" aria-live="polite">
             <UploadSimple size={44} />
-            <h1>{uploading < 100 ? '正在上传' : '正在校验视频'}</h1>
-            <p>{uploading < 100 ? uploading + '%' : '上传完成，即将开始分析'}</p>
+            <h1>{uploading < 100 ? '视频上传' : '视频校验'}</h1>
+            <p>{uploading < 100 ? uploading + '%' : '即将分析'}</p>
             <progress max="100" value={uploading} />
             <p className="muted">上传期间请保持此页面打开</p>
           </section>
@@ -200,11 +199,7 @@ export default function App() {
               <h1>{video.title}</h1>
             </div>
             <Player key={analysis.id} video={video} analysis={analysis} />
-            {analysis.warnings.map((warning, i) => (
-              <p className="notice" key={i}>
-                {warning}
-              </p>
-            ))}
+            <Notice messages={analysis.warnings} />
             <p className="expiry">
               保存至 {new Date(video.expires_at).toLocaleDateString('zh-CN')}
             </p>
@@ -212,13 +207,16 @@ export default function App() {
         ) : video && analysis?.status === 'failed' ? (
           <section className="status-page">
             <FilmStrip size={44} />
-            <h1>本次分析未完成</h1>
+            <h1>分析失败</h1>
             <p>{analysis.error?.message || '请稍后重试'}</p>
             {analysis.error?.request_id && <small>问题编号 {analysis.error.request_id}</small>}
-            <button className="primary action" disabled={retrying} onClick={() => void retry()}>
-              <ArrowClockwise />
-              {retrying ? '正在重试' : '重新分析'}
-            </button>
+            <ActionButton
+              icon={ArrowClockwise}
+              label={retrying ? '重试中' : '重试'}
+              tone="primary"
+              disabled={retrying}
+              onClick={() => void retry()}
+            />
           </section>
         ) : video && analysis ? (
           <section className="status-page" aria-live="polite">
@@ -241,7 +239,7 @@ export default function App() {
           </section>
         ) : selected && (detail.isPending || session.isPending) ? (
           <section className="status-page">
-            <p>正在读取视频…</p>
+            <p>读取视频</p>
           </section>
         ) : (
           <section className="welcome">
@@ -254,14 +252,13 @@ export default function App() {
               <br />
               在原视频中自由跳转，专注每一次交锋。
             </p>
-            <button
-              className="primary action"
+            <ActionButton
+              icon={UploadSimple}
+              label="选择视频"
+              tone="primary"
               disabled={!session.isSuccess}
               onClick={() => input.current?.click()}
-            >
-              <UploadSimple />
-              选择视频
-            </button>
+            />
             <small>MP4 · H.264 · 最大 500 MB / 15 分钟</small>
             {!!videos.data?.items.length && (
               <button className="text-button" onClick={() => setHistory(true)}>
@@ -272,18 +269,14 @@ export default function App() {
         )}
       </main>
       <footer className="bottom-actions">
-        <button onClick={() => setHistory(true)}>
-          <ClockCounterClockwise />
-          历史
-        </button>
-        <button
-          className="primary"
+        <ActionButton icon={ClockCounterClockwise} label="历史" onClick={() => setHistory(true)} />
+        <ActionButton
+          icon={UploadSimple}
+          label="上传"
+          tone="primary"
           disabled={!session.isSuccess || uploading !== null}
           onClick={() => input.current?.click()}
-        >
-          <UploadSimple />
-          上传
-        </button>
+        />
       </footer>
       {history && (
         <div className="drawer-backdrop" onClick={() => setHistory(false)}>
@@ -296,9 +289,7 @@ export default function App() {
           >
             <div className="drawer-heading">
               <h2>历史视频</h2>
-              <button aria-label="关闭历史" onClick={() => setHistory(false)}>
-                <X />
-              </button>
+              <IconButton label="关闭历史" icon={X} onClick={() => setHistory(false)} />
             </div>
             <p className="muted">保留七天，仅此浏览器可见</p>
             {videos.isLoading ? (
@@ -323,8 +314,8 @@ export default function App() {
                   ) : (
                     <span className="history-status">
                       {v.latest_analysis?.status === 'failed'
-                        ? '未完成'
-                        : stages[v.latest_analysis?.status || ''] || '处理中'}
+                        ? '分析失败'
+                        : stages[v.latest_analysis?.status || ''] || '正在处理'}
                     </span>
                   )}
                 </button>

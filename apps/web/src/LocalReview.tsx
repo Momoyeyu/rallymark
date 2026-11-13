@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { PingPong } from '@phosphor-icons/react';
+import { GearSix, X, Trash } from '@phosphor-icons/react';
+import { IconButton } from './ui/controls';
+import { Brand } from './ui/Brand';
+import { Notice } from './ui/Notice';
 import Player from './player/Player';
+import './LocalReview.css';
 import { localVideoMismatch, parseLocalMetadata, type LocalMetadata } from './localMetadata';
 import type { Analysis, Video } from './api';
 
 type Clip = {
   id: string;
-  file: File;
+  file: Pick<File, 'name' | 'size'>;
   url: string;
   metadata?: LocalMetadata;
   metadataName?: string;
@@ -29,6 +33,35 @@ export default function LocalReview() {
       owned.clear();
     };
   }, []);
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('preview')) return;
+    const abort = new AbortController();
+    void fetch('/__local-preview/manifest', { signal: abort.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('预览未就绪');
+        return response.json();
+      })
+      .then(({ clips: incoming }) => {
+        const ready: Clip[] = incoming.map(
+          (clip: { id: string; name: string; size: number; url: string; metadata: unknown }) => ({
+            id: clip.id,
+            file: { name: clip.name, size: clip.size },
+            url: clip.url,
+            metadata: parseLocalMetadata(clip.metadata),
+            metadataName: `${clip.id}.json`,
+            revision: 1,
+          }),
+        );
+        setClips(ready);
+        setSelected(ready.find((clip) => clip.id === 'nina')?.id ?? ready[0]?.id ?? '');
+        setConfigOpen(false);
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') setPreviewError(error.message);
+      });
+    return () => abort.abort();
+  }, []);
+  const [previewError, setPreviewError] = useState('');
   function addVideos(files: FileList | null) {
     const added = Array.from(files ?? []).map((file): Clip => {
       const url = URL.createObjectURL(file);
@@ -114,12 +147,7 @@ export default function LocalReview() {
   return (
     <div className="app-shell local-review">
       <header className="app-header">
-        <a href="?local=1" className="brand">
-          <PingPong weight="fill" />
-          <span>
-            Rally<span>Mark</span>
-          </span>
-        </a>
+        <Brand href="?local=1&preview=1" />
         <span className="muted">本地复盘</span>
       </header>
       <main>
@@ -145,15 +173,13 @@ export default function LocalReview() {
                   ))}
                 </select>
               </label>
-              <button
-                className="local-config-toggle"
-                aria-label="本地文件设置"
+              <IconButton
+                label="本地文件设置"
+                icon={configOpen ? X : GearSix}
                 aria-expanded={configOpen}
                 aria-controls="local-file-config"
                 onClick={() => setConfigOpen(!configOpen)}
-              >
-                {configOpen ? '收起设置' : '文件设置'}
-              </button>
+              />
             </div>
           )}
           <div id="local-file-config" className="local-config" hidden={!configOpen}>
@@ -193,8 +219,9 @@ export default function LocalReview() {
                     {entry.metadataName} · {metadata?.rallies.length ?? 0} 个回合
                   </p>
                 )}
-                <button
-                  className="text-button"
+                <IconButton
+                  label="移除此视频"
+                  icon={Trash}
                   onClick={() => {
                     if (!entry) return;
                     URL.revokeObjectURL(entry.url);
@@ -204,13 +231,16 @@ export default function LocalReview() {
                     setSelected(next?.id ?? '');
                     setConfigOpen(!next?.metadata);
                   }}
-                >
-                  移除此视频
-                </button>
+                />
               </>
             )}
           </div>
         </section>
+        {previewError && (
+          <p role="alert" className="error-banner">
+            {previewError}
+          </p>
+        )}
         {entry?.error && (
           <p role="alert" className="error-banner">
             {entry.error}
@@ -246,11 +276,7 @@ export default function LocalReview() {
                 );
               }}
             />
-            {analysis.warnings.map((warning, index) => (
-              <p className="notice" key={index}>
-                {warning}
-              </p>
-            ))}
+            <Notice messages={analysis.warnings} />
           </>
         )}
       </main>

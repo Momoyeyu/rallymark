@@ -1,3 +1,4 @@
+import { time } from './time';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CaretDoubleLeft,
@@ -8,6 +9,8 @@ import {
   SpeakerSlash,
   CornersOut,
 } from '@phosphor-icons/react';
+import { IconButton, AutoSwitch, Score } from '../ui/controls';
+import { RallyCard } from '../ui/RallyCard';
 import {
   PlaybackController,
   currentRally,
@@ -16,17 +19,6 @@ import {
 } from './controller';
 import { track, type Video, type Analysis, type Rally } from '../api';
 
-export const time = (seconds: number) =>
-  Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, '0') +
-  ':' +
-  Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, '0');
-export function scoreLabel(rally: Rally, index: number, hasScores: boolean) {
-  return hasScores ? rally.score || '比分待确认' : String(index + 1).padStart(2, '0');
-}
 export default function Player({
   video,
   analysis,
@@ -154,8 +146,8 @@ export default function Player({
           onClick={togglePlay}
         />
         {buffering && (
-          <span className="buffering" role="status">
-            加载视频…
+          <span className="buffering" role="status" aria-label="加载视频">
+            <span className="loading-ring" />
           </span>
         )}
         <div className="video-tools">
@@ -163,36 +155,30 @@ export default function Player({
             {time(position)} / {time(video.duration_s)}
           </span>
           <div>
-            <button aria-label={muted ? '开启声音' : '静音'} onClick={() => setMuted(!muted)}>
-              {muted ? <SpeakerSlash /> : <SpeakerHigh />}
-            </button>
-            <button aria-label="全屏" onClick={fullscreen}>
-              <CornersOut />
-            </button>
+            <IconButton
+              label={muted ? '开启声音' : '静音'}
+              icon={muted ? SpeakerSlash : SpeakerHigh}
+              onClick={() => setMuted(!muted)}
+            />
+            <IconButton label="全屏" icon={CornersOut} onClick={fullscreen} />
           </div>
         </div>
       </div>
       <div className="playback-panel">
         <div className="rally-heading">
-          <span className="rally-position">
-            {active >= 0
-              ? scoreLabel(rallies[active], active, hasScores)
-              : hasScores
-                ? '比分待确认'
-                : '—'}
-            <small>
-              {active >= 0 && rallies[active].score_status === 'inferred'
-                ? '推断'
-                : active >= 0
-                  ? ' / ' + rallies.length
-                  : ' / ' + rallies.length}
+          <div className="rally-position">
+            <Score
+              rally={active >= 0 ? rallies[active] : undefined}
+              index={active}
+              hasScores={hasScores}
+            />
+            <small className="rally-counter">
+              {String(Math.max(0, active + 1)).padStart(2, '0')} /{' '}
+              {String(rallies.length).padStart(2, '0')}
             </small>
-          </span>
-          <button
-            className="auto-toggle"
-            role="switch"
-            aria-checked={automatic}
-            aria-label="自动跳转"
+          </div>
+          <AutoSwitch
+            checked={automatic}
             onClick={() => {
               execute(controller.toggle(media.current?.currentTime || 0));
               record({
@@ -201,31 +187,30 @@ export default function Player({
                 properties: { enabled: controller.automatic },
               });
             }}
-          >
-            自动跳转
-            <span className={'switch ' + (automatic ? 'on' : '')}>
-              <i />
-            </span>
-          </button>
+          />
         </div>
         <div className="transport">
-          <button
-            aria-label="上一回合"
+          <IconButton
+            label="上一回合"
+            icon={CaretDoubleLeft}
+            tone="surface"
             disabled={navigationTarget(rallies, position, -1) < 0}
             onClick={() => navigate(-1)}
-          >
-            <CaretDoubleLeft weight="bold" />
-          </button>
-          <button className="play" aria-label={playing ? '暂停' : '播放'} onClick={togglePlay}>
-            {playing ? <Pause weight="fill" /> : <Play weight="fill" />}
-          </button>
-          <button
-            aria-label="下一回合"
+          />
+          <IconButton
+            label={playing ? '暂停' : '播放'}
+            icon={playing ? Pause : Play}
+            tone="primary"
+            size="large"
+            onClick={togglePlay}
+          />
+          <IconButton
+            label="下一回合"
+            icon={CaretDoubleRight}
+            tone="surface"
             disabled={navigationTarget(rallies, position, 1) < 0}
             onClick={() => navigate(1)}
-          >
-            <CaretDoubleRight weight="bold" />
-          </button>
+          />
         </div>
         <div className="seek-wrap">
           <div className="rally-marks" aria-hidden="true">
@@ -258,41 +243,33 @@ export default function Player({
           <span>{time(position)}</span>
           <span>{time(video.duration_s)}</span>
         </div>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        {rallies.length === 0 && <p className="notice">未识别到回合，可拖动时间轴查看原视频。</p>}
+        <div className="player-feedback" aria-live="polite">
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          {!error && rallies.length === 0 && <p className="muted">暂无回合，可自由播放</p>}
+        </div>
         <div className={'rally-strip' + (local ? ' local-rallies' : '')} aria-label="回合列表">
           {rallies.map((r, i) => (
-            <button
+            <RallyCard
               key={r.id}
-              className={i === active ? 'selected' : ''}
-              aria-label={'跳转回合 ' + (i + 1) + (r.score ? ' 比分 ' + r.score : '')}
-              onClick={() => {
+              rally={r}
+              index={i}
+              hasScores={hasScores}
+              selected={i === active}
+              duration={time(r.end_s - r.start_s)}
+              thumbnail={
+                local
+                  ? undefined
+                  : `/api/v1/videos/${video.id}/rallies/${r.id}/thumbnail?analysis_id=${analysis.id}`
+              }
+              onSelect={() => {
                 execute(controller.select(i));
                 record({ name: 'rally_navigation', video_id: video.id, properties: { index: i } });
               }}
-            >
-              {!local && (
-                <img
-                  loading="lazy"
-                  alt=""
-                  src={
-                    '/api/v1/videos/' +
-                    video.id +
-                    '/rallies/' +
-                    r.id +
-                    '/thumbnail?analysis_id=' +
-                    analysis.id
-                  }
-                />
-              )}
-              <span>{time(r.end_s - r.start_s)}</span>
-              <strong>{scoreLabel(r, i, hasScores)}</strong>
-              {r.score_status === 'inferred' && <small>推断</small>}
-            </button>
+            />
           ))}
         </div>
       </div>
