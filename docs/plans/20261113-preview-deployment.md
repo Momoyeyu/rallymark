@@ -9,4 +9,4 @@ Production GPU-disabled deployment runs a lightweight unavailable worker, real a
 - [x] Test capacity, unavailable admission, queueing and error sanitization; implement service boundary.
 - [x] Implement static preview export/build and reuse responsive UI; verify six matches and no API/upload.
 - [x] Add configured degraded Compose mode and Make operations; verify checks and commit to both remotes.
-- [ ] Back up, deploy both sites, verify HTTP/Range, mobile playback and unavailable UX; record URLs and deployment evidence.
+- [x] Back up, deploy both sites, verify HTTP/Range, mobile playback and unavailable UX; record URLs and deployment evidence.
