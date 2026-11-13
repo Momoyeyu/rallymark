@@ -1,6 +1,6 @@
 # Static preview and GPU maintenance deployment — 2026-11-13
 
-Application images: `c7c35d8`. Deployment target: `kuanguang-gpu` (selected via
+Application images: `4c1f148`. Deployment target: `kuanguang-gpu` (selected via
 operator configuration, not embedded in application source).
 
 - Formal application: http://10.106.128.145:8080/
@@ -31,6 +31,8 @@ The preview runs in a separate Compose project and has no API dependency.
   Chinese message, zero upload POST requests. Its request ID appeared in both
   `analysis_unavailable` and `http_request` backend log records. No model paths,
   credentials, driver details or traceback were sent to the browser.
+- Rejected algorithm-result errors also carry the same problem identifier in
+  the dispatcher log and the public error; a regression test verifies correlation.
 - Existing owned video remained readable: HTTP 206, `bytes 0-127/143459068`.
 - Healthy busy-worker capacity is tested independently: accepted as `busy`, not
   rejected as unavailable. Missing, stale and incompatible workers are excluded.
@@ -51,8 +53,8 @@ The preview runs in a separate Compose project and has no API dependency.
 Before changing the deployment, database dump, deployment environment, old
 version, source commit and volume mapping were saved in the target checkout at
 `.runtime/backups/pre-preview-20261113/`. Existing media/database volumes were
-retained. Current formal version is `c7c35d8`; previous maintenance-capable
-version is `9e57b87`. No GPU driver or firmware changes were made by this task.
+retained. Current formal version is `4c1f148`; previous maintenance-capable
+version is `c7c35d8`. No GPU driver or firmware changes were made by this task.
 
 See [operations](../operations.md#gpu-maintenance-and-static-preview) for preview
 export/deployment commands and switching back to real GPU execution after repair.
