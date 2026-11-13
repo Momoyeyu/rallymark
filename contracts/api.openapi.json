@@ -5,6 +5,22 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/availability": {
+      "get": {
+        "summary": "Availability",
+        "operationId": "availability_api_v1_availability_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/session": {
       "post": {
         "summary": "Session",

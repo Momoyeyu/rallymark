@@ -39,3 +39,7 @@ The [six-match parameter experiment](docs/20261113-001/report.md) records recall
 | scripts | Shared development and operator commands |
 
 See [architecture](docs/architecture.md) for service and persistence boundaries. [AGENTS.md](AGENTS.md) summarizes repository conventions. GitLab is the primary internal repository; GitHub is a private auxiliary remote. The default branch is master.
+
+只读六场预览：`make preview-export`、`make preview-build`、
+`make preview-deploy VERSION=<commit>`。正式站与预览站共用播放器和 UI，预览站
+没有上传入口，也不依赖算法服务。[部署与 GPU 维护模式](docs/operations.md#gpu-maintenance-and-static-preview)。

@@ -44,6 +44,7 @@ def main():
     run(["pnpm", "test" if args.tests else "check"], web)
     if not args.tests:
         run(["pnpm", "build"], web)
+        run(["pnpm", "build:preview"], web)
     run(["python3", "scripts/contracts.py", "--check"], ROOT)
 
 

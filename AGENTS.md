@@ -17,3 +17,11 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
 
 - Follow docs/design/interface.md for the UI language. Visible selectors, file pickers, progress and tooltips use the shared custom components; preserve semantic keyboard controls underneath. Verify expanded controls and viewport edges, not only collapsed screenshots.
 - Create reversible Git checkpoints for stable UI milestones and push both remotes. ui-baseline-20261113 records the pre-workspace version.
+
+- `apps/preview` is the read-only six-match static release. Its entry imports
+  `apps/web/src/preview`, reusing the exact player, UI primitives and theme.
+  The web package owns the shared build toolchain; build both entries in checks.
+  Never enable the development importer in either production entry.
+- GPU maintenance uses `GPU_MODE=disabled`, not a fake runner. API database
+  readiness and authenticated worker capacity are distinct. Public errors must
+  be sanitized and correlated with backend logs; busy workers accept queues.

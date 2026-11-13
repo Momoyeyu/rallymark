@@ -20,6 +20,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .availability import CapacityUnavailable, check_capacity
 from .config import Settings
 from .db import ACTIVE, Analysis, Maintenance, Video, connect, now
 from .dispatcher import run_dispatcher
@@ -141,7 +142,7 @@ def new_analysis(video, config, key=None):
     )
 
 
-def create_app(settings=None, engine=None, probe_video=probe):
+def create_app(settings=None, engine=None, probe_video=probe, capacity_check=None):
     settings = settings or Settings()
     config = settings.load_config()
     if engine is None:
@@ -297,6 +298,27 @@ def create_app(settings=None, engine=None, probe_video=probe):
             raise ApiError(404, "not_found", "视频不存在或已过期。")
         return video
 
+    def capacity(request_id=None):
+        try:
+            if capacity_check is not None:
+                return capacity_check()
+            return check_capacity(
+                settings.algorithm_url, settings.internal_token.get_secret_value()
+            )
+        except CapacityUnavailable as error:
+            logger.warning(
+                "analysis_unavailable",
+                extra={"fields": {"error_type": str(error), "request_id": request_id}},
+            )
+            raise ApiError(503, "analysis_unavailable", "分析服务暂不可用，请稍后重试。") from error
+
+    @app.get("/api/v1/availability")
+    def availability(request: Request):
+        owner(request)
+        with factory() as db:
+            admit_analysis(db)
+        return capacity(request.state.request_id)
+
     def admit_analysis(db):
         maintenance = db.scalar(
             select(Maintenance).where(Maintenance.id == 1).with_for_update(read=True)
@@ -341,6 +363,7 @@ def create_app(settings=None, engine=None, probe_video=probe):
                 if existing:
                     await file.close()
                     return video_json(db, existing)
+        await asyncio.to_thread(capacity, request.state.request_id)
         identifier = str(uuid4())
         temp = temporary / (identifier + ".upload")
         final = settings.media_root / (identifier + ".mp4")
@@ -363,6 +386,7 @@ def create_app(settings=None, engine=None, probe_video=probe):
                 )
             except InvalidVideo as error:
                 raise ApiError(422, "invalid_video", str(error)) from error
+            await asyncio.to_thread(capacity, request.state.request_id)
             os.replace(temp, final)
             with factory.begin() as db:
                 if idempotency_key:
@@ -470,6 +494,7 @@ def create_app(settings=None, engine=None, probe_video=probe):
                 or (idempotency_key and existing.idempotency_key == idempotency_key)
             ):
                 return analysis_json(existing)
+            capacity(request.state.request_id)
             admit_analysis(db)
             item = new_analysis(video, config, idempotency_key)
             db.add(item)

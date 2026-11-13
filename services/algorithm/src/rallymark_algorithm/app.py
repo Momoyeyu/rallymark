@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .db import database
-from .models import Job, WorkerStatus, utcnow
+from .models import ACTIVE, Job, WorkerStatus, utcnow
 from .settings import InferenceConfig, Settings, configure_logging
 
 REQUESTS = Counter("algorithm_http_requests_total", "Algorithm requests", ["status"])
@@ -76,21 +76,29 @@ def create_app(settings=None, sessions=None):
         try:
             with sessions() as session:
                 session.execute(text("SELECT 1"))
-                workers = (
-                    session.query(WorkerStatus)
-                    .filter(
-                        WorkerStatus.heartbeat_at
-                        > utcnow() - timedelta(seconds=settings.algorithm.lease_seconds),
-                        WorkerStatus.gpu_ready.is_(True),
-                        WorkerStatus.version == settings.algorithm.version,
-                    )
-                    .count()
-                )
-            if not workers:
-                return JSONResponse({"status": "waiting_for_worker"}, status_code=503)
         except SQLAlchemyError:
             return JSONResponse({"status": "database_unavailable"}, status_code=503)
         return {"status": "ready"}
+
+    @app.get("/internal/v1/capacity", dependencies=[Depends(authorize)])
+    def capacity():
+        with sessions() as session:
+            workers = (
+                session.query(WorkerStatus)
+                .filter(
+                    WorkerStatus.heartbeat_at
+                    > utcnow() - timedelta(seconds=settings.algorithm.lease_seconds),
+                    WorkerStatus.gpu_ready.is_(True),
+                    WorkerStatus.version == settings.algorithm.version,
+                )
+                .count()
+            )
+            queued = session.query(Job).filter(Job.status == "queued").count()
+            active = session.query(Job).filter(Job.status.in_(ACTIVE)).count()
+        return {
+            "state": ("busy" if active or queued else "ready") if workers else "unavailable",
+            "queued": queued,
+        }
 
     @app.get("/metrics", dependencies=[Depends(authorize)])
     def metrics():

@@ -16,3 +16,12 @@ smoke:
 	@python3 scripts/smoke.py
 smoke-gpu:
 	@python3 scripts/smoke.py --gpu
+
+# Static six-match preview: same UI, separate release and port.
+.PHONY: preview-export preview-build preview-deploy preview-status preview-logs
+preview-export:
+	python3 scripts/preview.py $(or $(EXPERIMENT),.runtime/experiments/20261113-003) .runtime/preview-data
+preview-build:
+	cd apps/web && pnpm build:preview
+preview-deploy preview-status preview-logs:
+	$(OPS) $@

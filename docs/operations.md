@@ -66,3 +66,29 @@ GitLab is the primary source and CI system. Merge requests and master run Python
 make sync pushes the current branch to origin (GitLab), then github (private auxiliary repository), failing if either push fails. It does not rewrite or delete remote history.
 
 The project runner uses the system service rallymark-gitlab-runner.service under a dedicated account with Docker group access. It starts at boot and restarts on failure. Check it with systemctl status rallymark-gitlab-runner and journalctl -u rallymark-gitlab-runner on the configured runner host. The runner can live on a different host from the application. Registration credentials stay in the account's private GitLab Runner configuration, outside this repository. Do not start a second nohup runner for the same registration.
+
+## GPU maintenance and static preview
+
+Set `GPU_MODE=disabled` in the selected target's private `.runtime/deploy.env`
+when hardware is unavailable. `make deploy VERSION=<commit>` then builds a
+lightweight maintenance worker, with no GPU reservation or model mount. The
+business API, algorithm API, database and web remain online. This is production
+maintenance mode, not simulated inference. New uploads and retries check worker
+capacity and return a public unavailable message with a request ID; existing
+media stays accessible. Busy healthy workers accept queued jobs. After hardware
+repair, set `GPU_MODE=enabled`, run `make doctor`, redeploy, then `make smoke-gpu`.
+API readiness checks database connectivity; authenticated algorithm capacity
+checks fresh, matching-version worker heartbeats separately.
+
+The read-only demo lives in `apps/preview`, sharing the web toolchain and the
+player, controls and styles in `apps/web`. It contains no importer or upload
+flow. Build with `make preview-build`. Export the six verified video/metadata
+pairs with `make preview-export EXPERIMENT=.runtime/experiments/<experiment>`.
+The export includes only public metadata and videos, never GT or raw diagnostics.
+Copy `.runtime/preview-data/` to the selected server at the same relative path.
+Deploy with `make preview-deploy VERSION=<commit>`; use `make preview-status` or
+`make preview-logs` to inspect it. `PREVIEW_PORT` defaults to 8081, separate from
+`WEB_PORT` 8080; `PREVIEW_DATA_PATH` is relative to `deploy/` unless absolute.
+Preview Compose uses its own project, image and read-only data mount. Exported
+video names contain content hashes; metadata is published atomically. Keep old
+video files until existing browser sessions have expired.

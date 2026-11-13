@@ -547,3 +547,35 @@ test('touch review uses custom controls and file actions without exposing native
     await context.close();
   }
 });
+
+test('unavailable analysis stops before video transfer and keeps a public request ID', async ({
+  page,
+}) => {
+  let uploads = 0;
+  await page.route('**/api/v1/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/session') || path.endsWith('/events'))
+      return route.fulfill({ status: 204 });
+    if (path.endsWith('/availability'))
+      return route.fulfill({
+        status: 503,
+        json: {
+          error: {
+            code: 'analysis_unavailable',
+            message: '分析服务暂不可用，请稍后重试。',
+            request_id: 'capacity-test',
+          },
+        },
+      });
+    if (route.request().method() === 'POST') uploads++;
+    return route.fulfill({ json: { items: [] } });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: '选择视频', exact: true })).toBeEnabled();
+  await page
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'match.mp4', mimeType: 'video/mp4', buffer: media });
+  await expect(page.getByRole('alert')).toContainText('分析服务暂不可用');
+  await expect(page.getByRole('alert')).toContainText('capacity-test');
+  expect(uploads).toBe(0);
+});

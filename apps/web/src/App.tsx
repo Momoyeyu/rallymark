@@ -84,6 +84,7 @@ export default function App() {
     setError(null);
     setUploading(0);
     try {
+      await request('/availability');
       const result = await upload(file, setUploading);
       client.setQueryData(['video', result.id], result);
       choose(result.id);

@@ -20,6 +20,30 @@ class OpsReview(unittest.TestCase):
         remote.start()
         self.addCleanup(remote.stop)
 
+    def test_disabled_gpu_mode_skips_hardware_preflight(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                patch.dict(os.environ, {"GPU_MODE": "disabled"}, clear=True),
+                patch.object(ops, "version_directory", return_value=Path(directory)),
+                patch.object(ops, "compose"),
+                patch.object(ops, "gpu_preflight") as gpu,
+                patch.object(ops, "drain"),
+                patch.object(ops, "migrate"),
+                patch.object(ops, "business"),
+            ):
+                ops.deploy("maintenance", build=True)
+                gpu.assert_not_called()
+
+    def test_disabled_compose_has_no_development_override(self):
+        with (
+            patch.dict(os.environ, {"GPU_MODE": "disabled"}, clear=True),
+            patch.object(ops, "run") as run,
+        ):
+            ops.compose("config")
+            command = [str(part) for part in run.call_args.args[0]]
+            self.assertIn(str(ops.ROOT / "deploy/compose.unavailable.yaml"), command)
+            self.assertNotIn(str(ops.ROOT / "deploy/compose.dev.yaml"), command)
+
     def test_invalid_algorithm_configuration_does_not_drain(self):
         def compose(*args, **kwargs):
             if args[:4] == ("run", "--rm", "--no-deps", "algorithm"):

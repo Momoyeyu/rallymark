@@ -1,0 +1,10 @@
+# Explicit production maintenance mode. Never fabricates analysis results.
+services:
+  algorithm-worker:
+    image: ${REGISTRY}/algorithm-unavailable:${VERSION}
+    build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: api}
+    command: [python, -m, rallymark_algorithm.unavailable_worker]
+    volumes: !override
+      - algorithm-work:/data/work
+      - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
+    deploy: !reset {}

@@ -5,12 +5,19 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from rallymark_api.app import create_app
+from rallymark_api.app import create_app as application_factory
+
+
 from rallymark_api.config import Settings
 from rallymark_api.db import Analysis, Maintenance, Video, connect, now
 from rallymark_api.dispatcher import dispatch_once
 from rallymark_api.migrate import migrate
 from rallymark_api.ops import cleanup
+
+
+def create_app(*args, **kwargs):
+    kwargs.setdefault("capacity_check", lambda: {"state": "ready", "queued": 0})
+    return application_factory(*args, **kwargs)
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 import time
-from datetime import timedelta
+from datetime import UTC, timedelta
 from uuid import uuid4
 
 import httpx
@@ -61,8 +61,12 @@ async def dispatch_once(factory, settings, config, client):
             "algorithm_version": item.algorithm_version,
         }
         duration = video.duration_s
+        created_at = item.created_at.replace(tzinfo=UTC)
+        timeout = item.config.get("algorithm", {}).get("timeout_seconds", 2700)
     headers = {"Authorization": "Bearer " + settings.internal_token.get_secret_value()}
     try:
+        if (now() - created_at).total_seconds() > timeout:
+            raise ValueError("Analysis deadline exceeded")
         url = settings.algorithm_url.rstrip("/") + "/internal/v1/jobs"
         response = (
             await client.get(f"{url}/{job_id}", headers=headers)
@@ -87,7 +91,27 @@ async def dispatch_once(factory, settings, config, client):
             item.progress = status.get("progress")
             item.rallies = rallies
             item.warnings = result.get("warnings", [])
-            item.error = status.get("error")
+            internal_error = status.get("error")
+            if internal_error:
+                logger.warning(
+                    "analysis_failed",
+                    extra={
+                        "fields": {
+                            "analysis_id": job_id,
+                            "error_code": internal_error.get("code"),
+                            "request_id": token,
+                        }
+                    },
+                )
+            item.error = (
+                {
+                    "code": "analysis_failed",
+                    "message": "分析未完成，请稍后重试。",
+                    "request_id": token,
+                }
+                if status["status"] == "failed"
+                else None
+            )
             item.lease_until = None
             item.lease_token = None
             item.next_poll_at = now() + timedelta(seconds=config.application.poll_seconds)
@@ -121,7 +145,8 @@ async def dispatch_once(factory, settings, config, client):
                     item.status = "failed"
                     item.error = {
                         "code": "invalid_algorithm_response",
-                        "message": "算法服务返回结果无效，请联系维护者检查任务日志。",
+                        "message": "分析未完成，请稍后重试。",
+                        "request_id": token,
                     }
     return True
 

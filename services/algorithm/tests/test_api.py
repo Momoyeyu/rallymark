@@ -26,6 +26,7 @@ def client(tmp_path):
         database_url="sqlite://", internal_token="test-service-token", ftt_root=Path("."), environment="test"
     )
     with TestClient(create_app(settings, sessions)) as client:
+        client.app.state.sessions = sessions
         yield client
 
 
@@ -59,7 +60,7 @@ def test_invalid_config_and_missing_job(client):
     data["config"] = {"tad_top_k": 201}
     assert client.post("/internal/v1/jobs", json=data, headers=headers).status_code == 422
     assert client.get("/internal/v1/jobs/" + str(uuid.uuid4()), headers=headers).status_code == 404
-    assert client.get("/health/ready").status_code == 503
+    assert client.get("/health/ready").status_code == 200
 
 
 def test_fake_cannot_start_in_production():
@@ -81,3 +82,26 @@ def test_api_requires_compatible_algorithm_version(client):
         ).status_code
         == 409
     )
+
+
+def test_capacity_requires_auth_and_reports_missing_workers(client):
+    assert client.get("/internal/v1/capacity").status_code == 401
+    response = client.get("/internal/v1/capacity", headers={"Authorization": "Bearer test-service-token"})
+    assert response.json() == {"state": "unavailable", "queued": 0}
+    assert client.get("/health/ready").status_code == 200
+
+
+def test_capacity_distinguishes_busy_and_stale_workers(client):
+    from datetime import timedelta
+
+    from rallymark_algorithm.models import WorkerStatus, utcnow
+
+    headers = {"Authorization": "Bearer test-service-token"}
+    with client.app.state.sessions.begin() as session:
+        session.add(WorkerStatus(id="worker", heartbeat_at=utcnow(), gpu_ready=True, version="ftt-c836c83"))
+    assert client.get("/internal/v1/capacity", headers=headers).json()["state"] == "ready"
+    client.post("/internal/v1/jobs", json=payload(), headers=headers)
+    assert client.get("/internal/v1/capacity", headers=headers).json() == {"state": "busy", "queued": 1}
+    with client.app.state.sessions.begin() as session:
+        session.get(WorkerStatus, "worker").heartbeat_at = utcnow() - timedelta(minutes=5)
+    assert client.get("/internal/v1/capacity", headers=headers).json()["state"] == "unavailable"

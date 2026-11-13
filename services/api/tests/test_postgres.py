@@ -140,7 +140,7 @@ def test_postgres_private_media_thumbnail_and_cleanup(tmp_path):
         check=True,
         timeout=20,
     )
-    app = create_app(settings, engine)
+    app = create_app(settings, engine, capacity_check=lambda: {"state": "ready", "queued": 0})
     identifier = None
     try:
         with TestClient(app) as client:
