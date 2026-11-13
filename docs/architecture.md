@@ -10,6 +10,6 @@ The browser session is an anonymous HttpOnly cookie. Video history, metadata and
 
 The mobile player defaults to automatic rally skipping. Manual scrubbing turns the toggle off, while previous/next buttons and automatic seeking preserve it. The last rally pauses at its end. Browsers require the first audible playback to follow a user gesture.
 
-The initial model configuration uses all 200 TAD candidates and a five-second orphan neighborhood. The model source version, weight hashes and effective configuration hash accompany tasks. Unsupported OCR layouts fall back to TAD with a warning. The experiment repository remains separate from this product.
+The validated development configuration uses 200 TAD candidates, a nine-second orphan neighborhood and protected Top-100 candidates. Score-constrained fusion merges nearby fragments and suppresses candidates only where supported by scoring evidence; see [the six-match report](20261113-003/report.md). Configuration is snapshotted per task. The model source version, weight hashes and effective configuration hash accompany tasks. Unsupported OCR layouts fall back to TAD with a warning. The experiment repository remains separate from this product.
 
 Structured logs correlate request, video and analysis IDs. Stage progress comes from actual processing events. /health/live describes process liveness and /health/ready describes required dependencies. The readiness and worker metrics are internal operating signals; video content and credentials are never logged.

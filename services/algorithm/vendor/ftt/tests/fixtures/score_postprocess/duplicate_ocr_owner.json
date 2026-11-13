@@ -1,0 +1,57 @@
+{
+  "id": "duplicate_ocr_owner",
+  "reason": "同一OCR不能归属两个融合区间",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      },
+      {
+        "start_s": 10,
+        "end_s": 12,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          11
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "pre_score": [
+          0,
+          0
+        ],
+        "post_score": [
+          1,
+          0
+        ],
+        "score_change_s": 4.5
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": "ValueError"
+}

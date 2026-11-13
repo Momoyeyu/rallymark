@@ -1,0 +1,95 @@
+{
+  "id": "ocr_only_not_fragment",
+  "reason": "无TAD支持的候选不作碎片吸收",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      },
+      {
+        "start_s": 18,
+        "end_s": 19,
+        "score": 0.99,
+        "tad_score": null,
+        "ocr_score": null,
+        "tad_indices": [],
+        "ocr_indices": [],
+        "source": "tad_only"
+      },
+      {
+        "start_s": 20,
+        "end_s": 24,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          21
+        ],
+        "ocr_indices": [
+          2
+        ],
+        "source": "tad_ocr"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "pre_score": [
+          0,
+          0
+        ],
+        "post_score": [
+          1,
+          0
+        ],
+        "score_change_s": 4.5
+      },
+      {
+        "start_s": 20,
+        "end_s": 24,
+        "score": 0.99,
+        "pre_score": [
+          1,
+          0
+        ],
+        "post_score": [
+          1,
+          1
+        ],
+        "score_change_s": 24.5
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 1,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": null,
+  "expected": [
+    {
+      "start_s": 1,
+      "end_s": 4,
+      "score_label": "0:0",
+      "score_status": "observed"
+    },
+    {
+      "start_s": 20,
+      "end_s": 24,
+      "score_label": "1:0",
+      "score_status": "observed"
+    }
+  ]
+}

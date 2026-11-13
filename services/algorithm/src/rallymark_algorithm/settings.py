@@ -12,14 +12,24 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class InferenceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tad_top_k: int = Field(default=200, ge=1, le=200)
-    nearby_seconds: float = Field(default=5, ge=1, le=10)
-    ocr_crop: str = Field(default="540:120:85:915", pattern=r"^\d+:\d+:\d+:\d+$")
+    nearby_seconds: float = Field(default=9, ge=1, le=30)
+    protect_top_m: int = Field(default=100, ge=0, le=200)
+    min_duration_s: float = Field(default=0.5, ge=0, le=5)
+    score_filter: bool = True
+    fragment_gap_s: float = Field(default=1, ge=0, le=5)
+    score_confidence: float = Field(default=0.8, ge=0, le=1)
+    edge_window_s: float = Field(default=60, ge=0, le=120)
+    ocr_crop: str = Field(default="auto", pattern=r"^(auto|\d+:\d+:\d+:\d+)$")
     ocr_width: int = Field(default=1920, gt=0)
     ocr_height: int = Field(default=1080, gt=0)
     timeout_seconds: int = Field(default=2700, ge=1, le=10800)
 
     @model_validator(mode="after")
     def validate_crop(self):
+        if self.protect_top_m > self.tad_top_k:
+            raise ValueError("Protected TAD count must not exceed Top-N")
+        if self.ocr_crop == "auto":
+            return self
         width, height, x, y = map(int, self.ocr_crop.split(":"))
         if width < 1 or height < 1 or x + width > self.ocr_width or y + height > self.ocr_height:
             raise ValueError("OCR crop must lie within the configured scoreboard image dimensions")
@@ -27,7 +37,7 @@ class InferenceConfig(BaseModel):
 
 
 class AlgorithmConfig(InferenceConfig):
-    version: str = "ftt-540cc9f"
+    version: str = "ftt-c836c83"
     lease_seconds: int = Field(default=60, ge=10)
     max_attempts: int = Field(default=2, ge=1, le=5)
     runner: str = Field(default="real", pattern="^(real|fake)$")

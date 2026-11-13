@@ -1,0 +1,79 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "python": "3.11.12",
+  "scenario": "One anchor followed by an adversarial long chain of individually mergeable fragments",
+  "optimized": [
+    {
+      "intervals": 100,
+      "median_seconds": 0.0008014589548110962,
+      "peak_traced_bytes": 74668,
+      "audit_target_references": 99,
+      "serialized_bytes": 8130
+    },
+    {
+      "intervals": 500,
+      "median_seconds": 0.0049592917785048485,
+      "peak_traced_bytes": 423984,
+      "audit_target_references": 499,
+      "serialized_bytes": 40917
+    },
+    {
+      "intervals": 1000,
+      "median_seconds": 0.009500124957412481,
+      "peak_traced_bytes": 830544,
+      "audit_target_references": 999,
+      "serialized_bytes": 81920
+    },
+    {
+      "intervals": 2000,
+      "median_seconds": 0.0220060832798481,
+      "peak_traced_bytes": 1758736,
+      "audit_target_references": 1999,
+      "serialized_bytes": 166355
+    },
+    {
+      "intervals": 4000,
+      "median_seconds": 0.04223575023934245,
+      "peak_traced_bytes": 3378192,
+      "audit_target_references": 3999,
+      "serialized_bytes": 335909
+    },
+    {
+      "intervals": 8000,
+      "median_seconds": 0.08892783429473639,
+      "peak_traced_bytes": 7110472,
+      "audit_target_references": 7999,
+      "serialized_bytes": 675898
+    }
+  ],
+  "baseline": [
+    {
+      "intervals": 100,
+      "median_seconds": 0.001128499861806631,
+      "peak_traced_bytes": 100156,
+      "audit_target_references": 5049,
+      "serialized_bytes": 27167
+    },
+    {
+      "intervals": 500,
+      "median_seconds": 0.0141634582541883,
+      "peak_traced_bytes": 1354880,
+      "audit_target_references": 125249,
+      "serialized_bytes": 616554
+    },
+    {
+      "intervals": 1000,
+      "median_seconds": 0.04604991711676121,
+      "peak_traced_bytes": 4704184,
+      "audit_target_references": 500499,
+      "serialized_bytes": 2478308
+    },
+    {
+      "intervals": 2000,
+      "median_seconds": 0.19773429073393345,
+      "peak_traced_bytes": 17485696,
+      "audit_target_references": 2000999,
+      "serialized_bytes": 10455743
+    }
+  ]
+}

@@ -10,6 +10,10 @@ def score_pair(value):
 
 def enrich_scores(rallies, fused_rows, ocr_rows):
     result = [dict(row, score=None, score_status="unknown") for row in rallies]
+    if fused_rows and all("score_label" in fused for fused in fused_rows):
+        for row, fused in zip(result, fused_rows, strict=True):
+            row.update(score=fused["score_label"], score_status=fused["score_status"])
+        return result
     for row, fused in zip(result, fused_rows, strict=True):
         observations = [
             ocr_rows[index - 1] for index in fused.get("ocr_indices", []) if 1 <= index <= len(ocr_rows)

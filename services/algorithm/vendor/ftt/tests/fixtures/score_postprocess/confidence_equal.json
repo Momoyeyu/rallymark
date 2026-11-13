@@ -1,0 +1,51 @@
+{
+  "id": "confidence_equal",
+  "reason": "恰好阈值仍有效",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.8,
+        "pre_score": [
+          0,
+          0
+        ],
+        "post_score": [
+          1,
+          0
+        ],
+        "score_change_s": 4.5
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": null,
+  "expected": [
+    {
+      "start_s": 1,
+      "end_s": 4,
+      "score_label": "0:0",
+      "score_status": "observed"
+    }
+  ]
+}

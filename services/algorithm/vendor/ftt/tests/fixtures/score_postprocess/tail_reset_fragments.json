@@ -1,0 +1,97 @@
+{
+  "id": "tail_reset_fragments",
+  "reason": "终局后已看到换局，不跨未知回合合并尾片段",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      },
+      {
+        "start_s": 12,
+        "end_s": 14,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": null,
+        "tad_indices": [
+          13
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      },
+      {
+        "start_s": 14.5,
+        "end_s": 16,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": null,
+        "tad_indices": [
+          20
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "pre_score": [
+          10,
+          8
+        ],
+        "post_score": [
+          11,
+          8
+        ],
+        "score_change_s": 4.5
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 1,
+      "edge_window_s": 30,
+      "video_duration_s": 20,
+      "score_observations": [
+        {
+          "t_s": 10,
+          "score": [
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  },
+  "expected_error": null,
+  "expected": [
+    {
+      "start_s": 1,
+      "end_s": 4,
+      "score_label": "10:8",
+      "score_status": "observed"
+    },
+    {
+      "start_s": 12,
+      "end_s": 14,
+      "score_label": null,
+      "score_status": "unknown"
+    },
+    {
+      "start_s": 14.5,
+      "end_s": 16,
+      "score_label": null,
+      "score_status": "unknown"
+    }
+  ]
+}

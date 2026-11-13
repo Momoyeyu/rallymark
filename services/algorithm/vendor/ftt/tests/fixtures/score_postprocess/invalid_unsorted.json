@@ -1,0 +1,38 @@
+{
+  "id": "invalid_unsorted",
+  "reason": "乱序不能静默关联错误OCR",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 10,
+        "end_s": 12,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": null,
+        "tad_indices": [
+          11
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      },
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": null,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      }
+    ],
+    "ocr_rows": [],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": "ValueError"
+}

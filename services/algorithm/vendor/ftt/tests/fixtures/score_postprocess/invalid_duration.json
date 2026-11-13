@@ -1,0 +1,14 @@
+{
+  "id": "invalid_duration",
+  "reason": "时长必须为正且有限",
+  "input": {
+    "rallies": [],
+    "ocr_rows": [],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0,
+      "video_duration_s": 0
+    }
+  },
+  "expected_error": "ValueError"
+}

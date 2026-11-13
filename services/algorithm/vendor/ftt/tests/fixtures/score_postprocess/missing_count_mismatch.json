@@ -1,0 +1,103 @@
+{
+  "id": "missing_count_mismatch",
+  "reason": "数量不等于分差时保留不确定候选",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      },
+      {
+        "start_s": 10,
+        "end_s": 12,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": null,
+        "tad_indices": [
+          11
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      },
+      {
+        "start_s": 30,
+        "end_s": 34,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          31
+        ],
+        "ocr_indices": [
+          2
+        ],
+        "source": "tad_ocr"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "pre_score": [
+          0,
+          0
+        ],
+        "post_score": [
+          1,
+          0
+        ],
+        "score_change_s": 4.5
+      },
+      {
+        "start_s": 30,
+        "end_s": 34,
+        "score": 0.99,
+        "pre_score": [
+          3,
+          0
+        ],
+        "post_score": [
+          3,
+          1
+        ],
+        "score_change_s": 34.5
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": null,
+  "expected": [
+    {
+      "start_s": 1,
+      "end_s": 4,
+      "score_label": "0:0",
+      "score_status": "observed"
+    },
+    {
+      "start_s": 10,
+      "end_s": 12,
+      "score_label": null,
+      "score_status": "unknown"
+    },
+    {
+      "start_s": 30,
+      "end_s": 34,
+      "score_label": "3:0",
+      "score_status": "observed"
+    }
+  ]
+}

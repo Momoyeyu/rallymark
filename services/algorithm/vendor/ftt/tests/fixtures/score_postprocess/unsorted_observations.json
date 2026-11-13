@@ -1,0 +1,23 @@
+{
+  "id": "unsorted_observations",
+  "reason": "原始观测必须按时间排序",
+  "input": {
+    "rallies": [],
+    "ocr_rows": [],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0,
+      "score_observations": [
+        {
+          "t_s": 2,
+          "score": null
+        },
+        {
+          "t_s": 1,
+          "score": null
+        }
+      ]
+    }
+  },
+  "expected_error": "ValueError"
+}

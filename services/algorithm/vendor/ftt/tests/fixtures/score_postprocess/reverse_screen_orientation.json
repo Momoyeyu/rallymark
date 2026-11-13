@@ -1,0 +1,47 @@
+{
+  "id": "reverse_screen_orientation",
+  "reason": "旧OCR top:bottom必须转换为bottom:top",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "pre_score_kuai_nina": "3:2",
+        "post_score_top_bottom": [
+          2,
+          4
+        ]
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": null,
+  "expected": [
+    {
+      "start_s": 1,
+      "end_s": 4,
+      "score_label": "3:2",
+      "score_status": "observed"
+    }
+  ]
+}

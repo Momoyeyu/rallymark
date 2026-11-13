@@ -1,0 +1,70 @@
+{
+  "id": "tail_end_window_outside",
+  "reason": "终局之后视频仍很长，不能视为结束",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      },
+      {
+        "start_s": 20,
+        "end_s": 21,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": null,
+        "tad_indices": [
+          21
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 1,
+        "end_s": 4,
+        "score": 0.99,
+        "pre_score": [
+          10,
+          8
+        ],
+        "post_score": [
+          11,
+          8
+        ],
+        "score_change_s": 4.5
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 30,
+      "video_duration_s": 34.501
+    }
+  },
+  "expected_error": null,
+  "expected": [
+    {
+      "start_s": 1,
+      "end_s": 4,
+      "score_label": "10:8",
+      "score_status": "observed"
+    },
+    {
+      "start_s": 20,
+      "end_s": 21,
+      "score_label": null,
+      "score_status": "unknown"
+    }
+  ]
+}

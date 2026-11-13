@@ -1,0 +1,13 @@
+{
+  "id": "invalid_bool_parameter",
+  "reason": "bool不能充当时间参数",
+  "input": {
+    "rallies": [],
+    "ocr_rows": [],
+    "parameters": {
+      "fragment_gap_s": true,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": "ValueError"
+}

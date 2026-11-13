@@ -1,0 +1,108 @@
+{
+  "id": "prefix_budget",
+  "reason": "首锚点1:0，只保留最强TAD作为首球",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 2,
+        "end_s": 3,
+        "score": 0.99,
+        "tad_score": 0.2,
+        "ocr_score": null,
+        "tad_indices": [
+          3
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      },
+      {
+        "start_s": 8,
+        "end_s": 12,
+        "score": 0.99,
+        "tad_score": 0.8,
+        "ocr_score": null,
+        "tad_indices": [
+          9
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      },
+      {
+        "start_s": 20,
+        "end_s": 24,
+        "score": 0.99,
+        "tad_score": null,
+        "ocr_score": 0.99,
+        "tad_indices": [],
+        "ocr_indices": [
+          1
+        ],
+        "source": "ocr_only"
+      },
+      {
+        "start_s": 28,
+        "end_s": 32,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          29
+        ],
+        "ocr_indices": [
+          2
+        ],
+        "source": "tad_ocr"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 20,
+        "end_s": 24,
+        "score": 0.99,
+        "pre_score": [
+          0,
+          0
+        ],
+        "post_score": [
+          1,
+          0
+        ],
+        "score_change_s": 24.5,
+        "first_appearance": true
+      },
+      {
+        "start_s": 28,
+        "end_s": 32,
+        "score": 0.99,
+        "pre_score": [
+          1,
+          0
+        ],
+        "post_score": [
+          1,
+          1
+        ],
+        "score_change_s": 32.5
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 60
+    }
+  },
+  "expected_error": null,
+  "expected": [
+    {
+      "start_s": 8,
+      "end_s": 12,
+      "score_label": "0:0",
+      "score_status": "inferred"
+    },
+    {
+      "start_s": 28,
+      "end_s": 32,
+      "score_label": "1:0",
+      "score_status": "observed"
+    }
+  ]
+}

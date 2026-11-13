@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import re
+import sys
 import time
 from importlib.metadata import version
 from pathlib import Path
@@ -22,6 +23,9 @@ import cv2
 import numpy as np
 import onnx
 from rapidocr_onnxruntime import RapidOCR
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code"))
+from ftt_score_rules import valid_score, legal_step, is_terminal
 
 
 FPS = 2.0
@@ -70,11 +74,9 @@ def read_score(ocr: RapidOCR, frame: np.ndarray) -> tuple[tuple[int, int] | None
     rows: dict[str, tuple[int, float]] = {}
     for box, raw, confidence in results or []:
         value = raw.strip()
-        if not re.fullmatch(r"\d{1,2}", value) or float(confidence) < OCR_CONFIDENCE:
+        if not re.fullmatch(r"\d{1,3}", value) or float(confidence) < OCR_CONFIDENCE:
             continue
         digit = int(value)
-        if digit > 11:
-            continue
         center_y = sum(float(p[1]) for p in box) / 4
         label = "top" if center_y < 55 else "bottom"
         if label not in rows or rows[label][1] < confidence:
@@ -95,6 +97,8 @@ def stable_states(observations: list[dict]) -> list[dict]:
         if len(agreeing) < STABLE_SAMPLES:
             continue
         score = tuple(row["score"])
+        if not valid_score(score):
+            continue
         if states and states[-1]["score"] == list(score):
             states[-1]["last_seen_s"] = row["t_s"]
             continue
@@ -110,7 +114,7 @@ def stable_states(observations: list[dict]) -> list[dict]:
             continue
         top, bottom = state["score"]
         old_top, old_bottom = accepted[-1]["score"]
-        if (top - old_top, bottom - old_bottom) in {(1, 0), (0, 1)}:
+        if legal_step((old_top, old_bottom), (top, bottom)):
             accepted.append(state)
     # At game point the broadcaster may remove the overlay immediately after
     # updating 11, leaving only one sampled frame. This rule uses the visible
@@ -123,8 +127,8 @@ def stable_states(observations: list[dict]) -> list[dict]:
             row = tail[0]
             top, bottom = row["score"]
             next_window = [r for r in observations if row["t_s"] < r["t_s"] <= row["t_s"] + 5]
-            game_over = max(top, bottom) >= 11 and abs(top - bottom) >= 2
-            if (top - old_top, bottom - old_bottom) in {(1, 0), (0, 1)} \
+            game_over = is_terminal((top, bottom))
+            if legal_step((old_top, old_bottom), (top, bottom)) \
                     and game_over and row["ocr_confidence"] >= 0.95 \
                     and sum(not r["visible"] for r in next_window) >= 4:
                 accepted.append({"score": row["score"], "first_seen_s": row["t_s"],
@@ -211,14 +215,14 @@ def main() -> None:
                 "normal_score_lag_s": NORMAL_SCORE_LAG_S,
                 "first_appearance_lag_s": FIRST_APPEARANCE_LAG_S,
                 "assumed_rally_duration_s": RALLY_DURATION_S,
-                "terminal_game_point_rule": "single high-confidence score 11 update followed by >=4 absent overlay samples in 5 s",
+                "terminal_game_point_rule": "single high-confidence legal game-winning update followed by >=4 absent overlay samples in 5 s",
                 "cpu_wall_seconds": round(time.perf_counter() - started, 3),
                 "models": models, "vlm_tokens": 0, "gt_used_for_inference": False}
     (args.out / "observations.json").write_text(json.dumps(observations, ensure_ascii=False, indent=2))
     (args.out / "score_states.json").write_text(json.dumps(states, ensure_ascii=False, indent=2))
     (args.out / "predictions.json").write_text(json.dumps({"metadata": metadata, "rallies": rallies}, ensure_ascii=False, indent=2))
     with (args.out / "rallies.csv").open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rallies[0]))
+        writer = csv.DictWriter(f, fieldnames=list(rallies[0]) if rallies else ["start_s", "end_s", "score"])
         writer.writeheader()
         writer.writerows(rallies)
     print(json.dumps({"visible_frames": sum(o["visible"] for o in observations),

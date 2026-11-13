@@ -1,0 +1,14 @@
+{
+  "id": "empty",
+  "reason": "空输入",
+  "input": {
+    "rallies": [],
+    "ocr_rows": [],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": null,
+  "expected": []
+}

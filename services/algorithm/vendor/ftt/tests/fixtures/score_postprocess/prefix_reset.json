@@ -1,0 +1,78 @@
+{
+  "id": "prefix_reset",
+  "reason": "之前更高比分显示截取或换局，不执行开头计数",
+  "input": {
+    "rallies": [
+      {
+        "start_s": 2,
+        "end_s": 3,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": null,
+        "tad_indices": [
+          3
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      },
+      {
+        "start_s": 20,
+        "end_s": 24,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": 0.99,
+        "tad_indices": [
+          21
+        ],
+        "ocr_indices": [
+          1
+        ],
+        "source": "tad_ocr"
+      }
+    ],
+    "ocr_rows": [
+      {
+        "start_s": 20,
+        "end_s": 24,
+        "score": 0.99,
+        "pre_score": [
+          0,
+          0
+        ],
+        "post_score": [
+          1,
+          0
+        ],
+        "score_change_s": 24.5
+      }
+    ],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 60,
+      "score_observations": [
+        {
+          "t_s": 1,
+          "score": [
+            8,
+            9
+          ]
+        }
+      ]
+    }
+  },
+  "expected_error": null,
+  "expected": [
+    {
+      "start_s": 2,
+      "end_s": 3,
+      "score_label": null,
+      "score_status": "unknown"
+    },
+    {
+      "start_s": 20,
+      "end_s": 24,
+      "score_label": "0:0",
+      "score_status": "observed"
+    }
+  ]
+}

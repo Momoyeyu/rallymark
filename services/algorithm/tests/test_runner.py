@@ -24,3 +24,40 @@ def test_vendor_top_k_and_ocr_end():
     ocr = [{"start_s": 3, "end_s": 5, "score": 0.7}]
     result = module.postprocess(tad, ocr, top_k=1)
     assert [(x["start_s"], x["end_s"]) for x in result["rallies"]] == [(1, 5)]
+
+
+def test_score_constraints_are_part_of_product_fusion():
+    ocr = [
+        {
+            "start_s": 1,
+            "end_s": 4,
+            "score": 0.99,
+            "pre_score_kuai_nina": "0:0",
+            "post_score_top_bottom": [0, 1],
+        },
+        {
+            "start_s": 20,
+            "end_s": 24,
+            "score": 0.99,
+            "pre_score_kuai_nina": "1:0",
+            "post_score_top_bottom": [1, 1],
+        },
+    ]
+    tad = [{"start_s": 10, "end_s": 12, "score": 0.9}]
+    result = module.postprocess(tad, ocr, top_k=200, protect_top_m=100, score_filter=True)
+    assert len(result["rallies"]) == 2
+    assert result["score_constraints"]["discarded"][0]["drop_reason"] == "closed_score_gap"
+
+
+def test_vendored_score_problem_set():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "unittest", "discover", "-s", str(FTT / "tests"), "-v"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Ran " in result.stderr and "Ran 0 tests" not in result.stderr

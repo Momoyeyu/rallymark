@@ -1,0 +1,28 @@
+{
+  "id": "invalid_nan",
+  "reason": "非有限时间",
+  "input": {
+    "rallies": [
+      {
+        "start_s": {
+          "invalid_number": "nan"
+        },
+        "end_s": 4,
+        "score": 0.99,
+        "tad_score": 0.5,
+        "ocr_score": null,
+        "tad_indices": [
+          2
+        ],
+        "ocr_indices": [],
+        "source": "tad_only"
+      }
+    ],
+    "ocr_rows": [],
+    "parameters": {
+      "fragment_gap_s": 0,
+      "edge_window_s": 0
+    }
+  },
+  "expected_error": "ValueError"
+}

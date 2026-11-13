@@ -1,0 +1,10 @@
+{
+  "top_k": 200,
+  "nearby_seconds": 9,
+  "protect_top_m": 100,
+  "min_duration_s": 0.5,
+  "fragment_gap_s": 1,
+  "score_confidence": 0.8,
+  "edge_window_s": 60,
+  "score_filter": true
+}

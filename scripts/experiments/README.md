@@ -113,3 +113,15 @@ services/algorithm/.venv/bin/python scripts/experiments/search_guarded.py \
 This validates completion and identical input provenance before rescreening. Phase modes are mutually exclusive. Metadata directories `review-no_regression/`, `review-long_gap/`, and `review-counts_only/` are written beside each phase's output directory; preserve prior exports before the next phase overwrites them. The study keeps final operational metadata in `review/` and the more aggressive duration filter in `review-fewer-false/`.
 
 Do not interpret the fixed-rule leave-one-video-out checks as an untouched test set: method design and refinement ranges have already been informed by these six matches. The report records the observed failure of aggressive duration tuning and the conservative restriction adopted afterward.
+
+## FTT 比分约束结果导入
+
+算法题库与参数搜索在独立 FTT 仓库完成后，用以下命令导入并逐字段验证产品适配器（不需要 GPU）：
+
+```sh
+services/algorithm/.venv/bin/python scripts/experiments/import_ftt_results.py \
+  --source ../ftt-demo/results/20261113-003 \
+  --output .runtime/experiments/20261113-003
+```
+
+导入会校验原片 SHA-256、保留原始数据并生成六份可离线播放的 review metadata。研究指标和边界见 [本次实验报告](../../docs/20261113-003/report.md)。

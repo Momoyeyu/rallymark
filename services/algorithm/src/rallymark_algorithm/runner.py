@@ -81,6 +81,34 @@ def validate_rallies(rows, duration):
     return normalized
 
 
+def load_ftt(settings, relative):
+    spec = importlib.util.spec_from_file_location(
+        "ftt_" + relative.replace("/", "_"), settings.ftt_root / relative
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def fuse_predictions(settings, config, tad, ocr, duration, observations=None):
+    module = load_ftt(settings, "code/postprocess_rallies.py")
+    # Missing fields belong to legacy snapshots; never apply new defaults to them.
+    return module.postprocess(
+        tad,
+        ocr,
+        top_k=config["tad_top_k"],
+        nearby_seconds=config["nearby_seconds"],
+        protect_top_m=config.get("protect_top_m", 0),
+        min_duration_s=config.get("min_duration_s", 0),
+        score_filter=config.get("score_filter", False),
+        fragment_gap_s=config.get("fragment_gap_s", 1),
+        score_confidence=config.get("score_confidence", 0.8),
+        edge_window_s=config.get("edge_window_s", 30),
+        video_duration_s=duration,
+        score_observations=observations,
+    )
+
+
 def run_analysis(job, settings, progress, check):
     config = job.config
     started = time.monotonic()
@@ -154,8 +182,18 @@ def run_analysis(job, settings, progress, check):
         process(command, attempt / "pipeline.log", deadline, check, progress)
         tad = json.loads((tad_dir / "predictions.json").read_text())["rallies"]
         ocr = []
+        observations = None
         if (stream["width"], stream["height"]) == (config["ocr_width"], config["ocr_height"]):
             progress("ocr")
+            filters = "fps=2,crop=" + config["ocr_crop"]
+            if config["ocr_crop"] == "auto":
+                layout_module = load_ftt(settings, "ocr/scoreboard_layout.py")
+                layout = layout_module.detect_video_layout(video)
+                (attempt / "layout.json").write_text(json.dumps(layout))
+                filters = layout_module.crop_filter(layout["crop_xywh"][0])
+                if layout["warning"]:
+                    warnings.append(layout["warning"])
+                check()
             frames = attempt / "ocr/frames"
             frames.mkdir(parents=True)
             process(
@@ -167,7 +205,7 @@ def run_analysis(job, settings, progress, check):
                     "-i",
                     str(video),
                     "-vf",
-                    "fps=2,crop=" + config["ocr_crop"],
+                    filters,
                     "-q:v",
                     "2",
                     str(frames / "%06d.jpg"),
@@ -191,6 +229,7 @@ def run_analysis(job, settings, progress, check):
                     check,
                 )
                 ocr = json.loads((attempt / "ocr/predictions.json").read_text())["rallies"]
+                observations = json.loads((attempt / "ocr/observations.json").read_text())
             except AnalysisFailure as error:
                 if error.code != "inference_failed":
                     raise
@@ -200,14 +239,8 @@ def run_analysis(job, settings, progress, check):
         else:
             warnings.append("Video layout is outside the supported OCR dimensions; results use TAD only")
         progress("postprocessing")
-        spec = importlib.util.spec_from_file_location(
-            "ftt_postprocess", settings.ftt_root / "code/postprocess_rallies.py"
-        )
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        fused = module.postprocess(
-            tad, ocr, nearby_seconds=config["nearby_seconds"], top_k=config["tad_top_k"]
-        )
+        fused = fuse_predictions(settings, config, tad, ocr, duration, observations)
+        warnings.extend(fused.get("score_constraints", {}).get("warnings", []))
         (attempt / "postprocessed.json").write_text(json.dumps(fused, ensure_ascii=False))
         rallies = fused["rallies"]
         fused_rows, ocr_rows = rallies, ocr

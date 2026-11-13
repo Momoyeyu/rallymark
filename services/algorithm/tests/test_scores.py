@@ -29,3 +29,14 @@ def test_missing_scores_stay_unknown_and_first_anchor_is_used():
         [{"start_s": 1, "pre_score_kuai_nina": "4:2"}, {"start_s": 5, "pre_score_kuai_nina": "5:2"}],
     )
     assert result[0]["score"] == "4:2"
+
+
+def test_algorithm_score_decision_is_authoritative():
+    fused = [
+        {"ocr_indices": [1], "score_label": "1:0", "score_status": "observed"},
+        {"ocr_indices": [1], "score_label": None, "score_status": "unknown"},
+        {"score_label": "2:0", "score_status": "inferred"},
+    ]
+    result = enrich_scores([{}] * 3, fused, [{"start_s": 1, "pre_score_kuai_nina": "0:0"}])
+    assert [r["score"] for r in result] == ["1:0", None, "2:0"]
+    assert result[1]["score_status"] == "unknown"

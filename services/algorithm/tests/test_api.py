@@ -36,7 +36,7 @@ def payload():
         "sha256": "a" * 64,
         "config": {},
         "config_hash": "b" * 64,
-        "algorithm_version": "ftt-540cc9f",
+        "algorithm_version": "ftt-c836c83",
     }
 
 
@@ -48,7 +48,7 @@ def test_service_auth_and_idempotent_identity(client):
     assert first.status_code == 200, first.text
     assert first.json()["status"] == "queued"
     assert client.post("/internal/v1/jobs", json=data, headers=headers).json() == first.json()
-    data["config"] = {"tad_top_k": 30}
+    data["config"] = {"tad_top_k": 150}
     assert client.post("/internal/v1/jobs", json=data, headers=headers).status_code == 409
     assert client.get("/internal/v1/jobs/" + data["id"], headers=headers).json()["attempt"] == 0
 

@@ -1,0 +1,46 @@
+# 长期维护的后处理题库
+
+权威题目与输入输出范围见 [题目说明](../../../docs/score-postprocess-problem.md)。期望输出须人工审核，不得通过待测算法批量重写。
+
+- [closed_gap](closed_gap.json)：连续得分之间无额外计分回合
+- [confidence_equal](confidence_equal.json)：恰好阈值仍有效
+- [conflicting_one_interval](conflicting_one_interval.json)：同区间多个不同比分变化，不能挑一个解释
+- [deuce_partial_unique](deuce_partial_unique.json)：加分阶段只有唯一时才推断
+- [duplicate_ocr_owner](duplicate_ocr_owner.json)：同一OCR不能归属两个融合区间
+- [empty](empty.json)：空输入
+- [first_appearance](first_appearance.json)：首次出现的反推不是锚点
+- [fragment_chain](fragment_chain.json)：连续碎片沿边界传递合并
+- [gap_equal_boundary](gap_equal_boundary.json)：合并距离等于阈值时合并
+- [gap_just_outside](gap_just_outside.json)：略大于阈值不合并
+- [invalid_bool_parameter](invalid_bool_parameter.json)：bool不能充当时间参数
+- [invalid_bool_time](invalid_bool_time.json)：bool不是秒数
+- [invalid_confidence_is_not_anchor](invalid_confidence_is_not_anchor.json)：bool不是可信OCR置信度
+- [invalid_duration](invalid_duration.json)：时长必须为正且有限
+- [invalid_index](invalid_index.json)：OCR引用必须存在
+- [invalid_nan](invalid_nan.json)：非有限时间
+- [invalid_overlap](invalid_overlap.json)：此阶段只接受时间融合后的不相交区间
+- [invalid_transition](invalid_transition.json)：一次跳两分不是合法锚点
+- [invalid_unsorted](invalid_unsorted.json)：乱序不能静默关联错误OCR
+- [missing_count_mismatch](missing_count_mismatch.json)：数量不等于分差时保留不确定候选
+- [missing_two_unique](missing_two_unique.json)：缺两次OCR，同一方得分唯一可推断
+- [mixed_winners](mixed_winners.json)：混合得分不可臆测中间胜方
+- [no_scores](no_scores.json)：无比分不删除
+- [non_scoring_invalid_terminal](non_scoring_invalid_terminal.json)：12:8不能作为合法终局证据
+- [ocr_only_not_fragment](ocr_only_not_fragment.json)：无TAD支持的候选不作碎片吸收
+- [prefix_budget](prefix_budget.json)：首锚点1:0，只保留最强TAD作为首球
+- [prefix_midgame](prefix_midgame.json)：起点太晚，不能假定包含整局开头
+- [prefix_reset](prefix_reset.json)：之前更高比分显示截取或换局，不执行开头计数
+- [reset](reset.json)：锚点直接比分倒退，不跨局剔除
+- [reset_hidden_between_anchors](reset_hidden_between_anchors.json)：锚点表面连续但中间原始观测显示换局，应保留
+- [reverse_screen_orientation](reverse_screen_orientation.json)：旧OCR top:bottom必须转换为bottom:top
+- [right_tie](right_tie.json)：两侧同距离优先右侧
+- [tail_after_reset](tail_after_reset.json)：终局后看到新一局，不能删尾部
+- [tail_end_window_equal](tail_end_window_equal.json)：终局距离视频结束恰好阈值也可剔除
+- [tail_end_window_outside](tail_end_window_outside.json)：终局之后视频仍很长，不能视为结束
+- [tail_reset_fragments](tail_reset_fragments.json)：终局后已看到换局，不跨未知回合合并尾片段
+- [tail_without_terminal](tail_without_terminal.json)：尾部无终局证据仍保留
+- [terminal_10_8](terminal_10_8.json)：11分/加分领先两分终局
+- [terminal_11_11](terminal_11_11.json)：11分/加分领先两分终局
+- [terminal_12_11](terminal_12_11.json)：11分/加分领先两分终局
+- [unsorted_observations](unsorted_observations.json)：原始观测必须按时间排序
+- [weak_evidence](weak_evidence.json)：低于阈值无锚点

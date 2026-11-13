@@ -164,7 +164,7 @@ def test_readiness_and_config_snapshot(context):
     assert client.get("/health/ready").status_code == 200
     video = upload(client).json()
     assert video["latest_analysis"]["config_hash"] == settings.load_config().digest()
-    assert video["latest_analysis"]["algorithm_version"] == "ftt-540cc9f"
+    assert video["latest_analysis"]["algorithm_version"] == "ftt-c836c83"
 
 
 def test_invalid_algorithm_result_does_not_publish(context):
