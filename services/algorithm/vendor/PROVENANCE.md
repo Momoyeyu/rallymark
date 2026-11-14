@@ -17,3 +17,5 @@ See docs/20261113-003/report.md and the FTT source commit for the development me
 No model weights, sampling or GPU math changed in this update.
 
 The synthetic score problem fixtures and independent oracle tests are included from this same source commit and run in product CI. Their authority remains the FTT repository.
+
+Performance update: FTT commit a5143b9 adds optional per-thread decoder reuse and bounded ordered prefetch, retaining the 768/384 global windows, frame tensors, inference math and global NMS. All 33 sample-window tensor hashes and all 200 rally / 500 action outputs match the baseline. OCR adds explicit CPU/CUDA selection and provider validation. The product runs the two subprocess branches in parallel with independent logs and cancellation; CUDA OCR failures retry on CPU. See FTT docs/20261114-002 for measured ablations. NumPy 1.26.4 and ORT GPU 1.16.3 are pinned in the product GPU lock; the CPU ORT distribution is excluded on Linux to avoid overwriting the shared module.

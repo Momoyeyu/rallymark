@@ -111,7 +111,7 @@ def create_app(settings=None, sessions=None):
         identity = {
             "video_id": str(payload.video_id),
             "sha256": payload.sha256,
-            "config": payload.config.model_dump(),
+            "config": payload.config.model_dump(exclude_unset=True),
             "config_hash": payload.config_hash,
             "algorithm_version": payload.algorithm_version,
         }

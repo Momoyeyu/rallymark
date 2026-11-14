@@ -1,3 +1,4 @@
+import { useNextPreload } from './useNextPreload';
 import { time } from './time';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -57,6 +58,14 @@ export default function Player({
   const controller = useMemo(() => new PlaybackController(rallies), [rallies]);
   const hasScores = rallies.some((r) => r.score);
   const active = currentRally(rallies, position);
+  const next = navigationTarget(rallies, position, 1);
+  useNextPreload(
+    media,
+    mediaSrc ?? '/api/v1/videos/' + video.id + '/media',
+    next >= 0 ? rallies[next].start_s : undefined,
+    playing && !buffering,
+    (properties) => record({ name: 'playback_prefetch', video_id: video.id, properties }),
+  );
   const execute = (command: PlaybackCommand) => {
     const element = media.current;
     if (!element) return;

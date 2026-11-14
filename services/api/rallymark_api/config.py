@@ -18,7 +18,7 @@ class ApplicationConfig(BaseModel):
 
 class AlgorithmConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    version: str = "ftt-c836c83"
+    version: str = "ftt-a5143b9"
     tad_top_k: int = Field(default=200, ge=1, le=200)
     nearby_seconds: float = Field(default=9, ge=1, le=30)
     protect_top_m: int = Field(default=100, ge=0, le=200)
@@ -30,6 +30,11 @@ class AlgorithmConfig(BaseModel):
     ocr_crop: str = Field(default="auto", pattern=r"^(auto|\d+:\d+:\d+:\d+)$")
     ocr_width: int = Field(default=1920, gt=0)
     ocr_height: int = Field(default=1080, gt=0)
+    parallel_inference: bool = True
+    decoder_mode: str = Field(default="prefetch", pattern=r"^(fresh|reuse|prefetch)$")
+    decode_workers: int = Field(default=4, ge=1, le=4)
+    prefetch_depth: int = Field(default=4, ge=1, le=8)
+    ocr_execution_provider: str = Field(default="cuda", pattern=r"^(cpu|cuda)$")
     timeout_seconds: int = Field(default=2700, gt=0)
     lease_seconds: int = Field(default=60, ge=30)
     max_attempts: int = Field(default=2, ge=1, le=5)

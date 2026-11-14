@@ -176,6 +176,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--reuse-observations", action="store_true",
                         help="Reapply score-state rules to previously saved OCR reads")
+    parser.add_argument("--execution-provider", choices=["cpu", "cuda"], default="cpu")
     args = parser.parse_args()
     started = time.perf_counter()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -187,7 +188,18 @@ def main() -> None:
         if len(observations) != len(images):
             raise RuntimeError("Cached OCR frame count does not match extracted frames")
     else:
-        ocr = RapidOCR(intra_op_num_threads=4, inter_op_num_threads=1)
+        use_cuda = args.execution_provider == "cuda"
+        ocr = RapidOCR(intra_op_num_threads=4, inter_op_num_threads=1,
+                       det_use_cuda=use_cuda, cls_use_cuda=use_cuda, rec_use_cuda=use_cuda)
+        execution_providers = {}
+        for name in ["text_det", "text_cls", "text_rec"]:
+            engine = getattr(ocr, name)
+            holder = getattr(engine, "infer", getattr(engine, "session", None))
+            session = holder.session
+            providers = session.get_providers()
+            execution_providers[name] = providers
+            if use_cuda and providers[0] != "CUDAExecutionProvider":
+                raise RuntimeError(f"{name} did not enable requested CUDA execution provider")
         observations = []
         for index, path in enumerate(images):
             frame = cv2.imread(str(path))
@@ -216,6 +228,8 @@ def main() -> None:
                 "first_appearance_lag_s": FIRST_APPEARANCE_LAG_S,
                 "assumed_rally_duration_s": RALLY_DURATION_S,
                 "terminal_game_point_rule": "single high-confidence legal game-winning update followed by >=4 absent overlay samples in 5 s",
+                "execution_provider": args.execution_provider,
+                "session_providers": execution_providers if not args.reuse_observations else {},
                 "cpu_wall_seconds": round(time.perf_counter() - started, 3),
                 "models": models, "vlm_tokens": 0, "gt_used_for_inference": False}
     (args.out / "observations.json").write_text(json.dumps(observations, ensure_ascii=False, indent=2))

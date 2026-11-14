@@ -92,3 +92,18 @@ Deploy with `make preview-deploy VERSION=<commit>`; use `make preview-status` or
 Preview Compose uses its own project, image and read-only data mount. Exported
 video names contain content hashes; metadata is published atomically. Keep old
 video files until existing browser sessions have expired.
+
+## Performance configuration
+
+New algorithm snapshots include `parallel_inference`, `decoder_mode`,
+`decode_workers`, `prefetch_depth`, and `ocr_execution_provider`. The validated
+4090 D configuration uses parallel branches, four ordered CPU decode workers,
+depth four and CUDA OCR. CPU fallback is recorded in the attempt's `ocr.log` and
+result warning. TAD logs are separate in `tad.log`. Keep source/version and both
+service configurations synchronized; existing jobs retain their saved settings.
+
+Linux GPU dependencies deliberately install `onnxruntime-gpu` instead of the CPU
+distribution, which shares the same import path. The uv override excludes the CPU
+distribution on Linux. CUDA OCR subprocesses find CUDA 11/cuDNN 8 libraries from
+the pinned PyTorch environment. Rebuild the worker image when updating this lock;
+validate actual CUDA provider execution and a real sample, not only the GPU name.

@@ -7,7 +7,7 @@ import time
 import threading
 import subprocess
 from contextlib import asynccontextmanager, suppress
-from datetime import timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 from typing import Literal
@@ -518,9 +518,30 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             path = media_path(video)
             if not path.is_file():
                 raise ApiError(404, "not_found", "视频文件不存在。")
-            return FileResponse(
-                path, media_type="video/mp4", headers={"Cache-Control": "private, no-store"}
+            remaining = (video.expires_at.replace(tzinfo=UTC) - now()).total_seconds()
+            if remaining <= 0:
+                raise ApiError(404, "not_found", "视频不存在或已过期。")
+            ttl = min(30, int(remaining))
+            response = FileResponse(
+                path,
+                media_type="video/mp4",
+                stat_result=path.stat(),
+                headers={
+                    "Cache-Control": f"private, max-age={ttl}, must-revalidate",
+                    "Vary": "Cookie",
+                },
             )
+            if (
+                not request.headers.get("range")
+                and request.headers.get("if-none-match") == response.headers["etag"]
+            ):
+                return Response(
+                    status_code=304,
+                    headers={
+                        key: response.headers[key] for key in ("etag", "cache-control", "vary")
+                    },
+                )
+            return response
 
     def thumbnail(video, key, timestamp):
         directory = settings.media_root / "thumbnails" / video.id

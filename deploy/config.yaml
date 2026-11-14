@@ -5,7 +5,7 @@ application:
   session_cookie_secure: false
   poll_seconds: 2
 algorithm:
-  version: ftt-c836c83
+  version: ftt-a5143b9
   tad_top_k: 200
   nearby_seconds: 9
   protect_top_m: 100
@@ -17,6 +17,11 @@ algorithm:
   ocr_crop: 'auto'
   ocr_width: 1920
   ocr_height: 1080
+  parallel_inference: true
+  decoder_mode: prefetch
+  decode_workers: 4
+  prefetch_depth: 4
+  ocr_execution_provider: cuda
   timeout_seconds: 2700
   lease_seconds: 60
   max_attempts: 2

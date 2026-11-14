@@ -22,6 +22,11 @@ class InferenceConfig(BaseModel):
     ocr_crop: str = Field(default="auto", pattern=r"^(auto|\d+:\d+:\d+:\d+)$")
     ocr_width: int = Field(default=1920, gt=0)
     ocr_height: int = Field(default=1080, gt=0)
+    parallel_inference: bool = True
+    decoder_mode: str = Field(default="prefetch", pattern=r"^(fresh|reuse|prefetch)$")
+    decode_workers: int = Field(default=4, ge=1, le=4)
+    prefetch_depth: int = Field(default=4, ge=1, le=8)
+    ocr_execution_provider: str = Field(default="cuda", pattern=r"^(cpu|cuda)$")
     timeout_seconds: int = Field(default=2700, ge=1, le=10800)
 
     @model_validator(mode="after")
@@ -37,7 +42,7 @@ class InferenceConfig(BaseModel):
 
 
 class AlgorithmConfig(InferenceConfig):
-    version: str = "ftt-c836c83"
+    version: str = "ftt-a5143b9"
     lease_seconds: int = Field(default=60, ge=10)
     max_attempts: int = Field(default=2, ge=1, le=5)
     runner: str = Field(default="real", pattern="^(real|fake)$")

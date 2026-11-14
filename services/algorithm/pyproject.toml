@@ -9,12 +9,16 @@ dependencies = [
 ]
 [project.optional-dependencies]
 gpu = [
-  "torch==2.0.1", "torchvision==0.15.2", "numpy==1.23.5", "mmengine==0.10.7",
+  "torch==2.0.1", "torchvision==0.15.2", "numpy==1.26.4", "mmengine==0.10.7",
   "mmaction2==1.1.0", "mmcv-lite==2.0.1", "decord==0.6.0",
-  "rapidocr-onnxruntime==1.4.4", "onnx", "onnxruntime<1.32", "opencv-python<4.12",
+  "rapidocr-onnxruntime==1.4.4", "onnx", "onnxruntime==1.16.3; sys_platform != 'linux'", "onnxruntime-gpu==1.16.3; sys_platform == 'linux'", "opencv-python<4.12",
   "scipy<1.16", "einops", "pandas<2.4", "tqdm", "imgaug", "pytorchvideo",
   "wandb", "gdown==5.2.2", "ninja", "setuptools<70", "wheel",
 ]
+# The GPU distribution provides the same Python module. Installing both corrupts it.
+[tool.uv]
+override-dependencies = ["onnxruntime==1.16.3; sys_platform != 'linux'"]
+
 [dependency-groups]
 dev = ["pytest>=8,<9", "ruff>=0.9,<1"]
 [[tool.uv.index]]

@@ -171,7 +171,7 @@ def test_readiness_and_config_snapshot(context):
     assert client.get("/health/ready").status_code == 200
     video = upload(client).json()
     assert video["latest_analysis"]["config_hash"] == settings.load_config().digest()
-    assert video["latest_analysis"]["algorithm_version"] == "ftt-c836c83"
+    assert video["latest_analysis"]["algorithm_version"] == settings.load_config().algorithm.version
 
 
 def test_invalid_algorithm_result_does_not_publish(context, caplog):
@@ -373,3 +373,20 @@ def test_upload_checks_drain_after_video_validation(context):
     assert not list((settings.media_root / "temporary").iterdir())
     with factory() as db:
         assert list(db.scalars(select(Analysis))) == []
+
+
+def test_media_revalidation_remains_private_and_checks_expiry(context):
+    client, app, factory, _ = context
+    video = upload(client).json()
+    url = f"/api/v1/videos/{video['id']}/media"
+    response = client.get(url)
+    assert response.headers["cache-control"] == "private, max-age=30, must-revalidate"
+    assert response.headers["vary"] == "Cookie"
+    conditional = {"If-None-Match": response.headers["etag"]}
+    assert client.get(url, headers=conditional).status_code == 304
+    with TestClient(app) as stranger:
+        stranger.post("/api/v1/session")
+        assert stranger.get(url, headers=conditional).status_code == 404
+    with factory.begin() as db:
+        db.get(Video, video["id"]).expires_at = now() - timedelta(seconds=1)
+    assert client.get(url, headers=conditional).status_code == 404

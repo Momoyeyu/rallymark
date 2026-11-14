@@ -23,7 +23,11 @@ def client(tmp_path):
     Base.metadata.create_all(engine)
     sessions = sessionmaker(engine, expire_on_commit=False)
     settings = Settings(
-        database_url="sqlite://", internal_token="test-service-token", ftt_root=Path("."), environment="test"
+        database_url="sqlite://",
+        internal_token="test-service-token",
+        ftt_root=Path("."),
+        environment="test",
+        algorithm={"version": "test-algorithm"},
     )
     with TestClient(create_app(settings, sessions)) as client:
         client.app.state.sessions = sessions
@@ -37,7 +41,7 @@ def payload():
         "sha256": "a" * 64,
         "config": {},
         "config_hash": "b" * 64,
-        "algorithm_version": "ftt-c836c83",
+        "algorithm_version": "test-algorithm",
     }
 
 
@@ -98,10 +102,25 @@ def test_capacity_distinguishes_busy_and_stale_workers(client):
 
     headers = {"Authorization": "Bearer test-service-token"}
     with client.app.state.sessions.begin() as session:
-        session.add(WorkerStatus(id="worker", heartbeat_at=utcnow(), gpu_ready=True, version="ftt-c836c83"))
+        session.add(
+            WorkerStatus(id="worker", heartbeat_at=utcnow(), gpu_ready=True, version="test-algorithm")
+        )
     assert client.get("/internal/v1/capacity", headers=headers).json()["state"] == "ready"
     client.post("/internal/v1/jobs", json=payload(), headers=headers)
     assert client.get("/internal/v1/capacity", headers=headers).json() == {"state": "busy", "queued": 1}
     with client.app.state.sessions.begin() as session:
         session.get(WorkerStatus, "worker").heartbeat_at = utcnow() - timedelta(minutes=5)
     assert client.get("/internal/v1/capacity", headers=headers).json()["state"] == "unavailable"
+
+
+def test_task_snapshot_does_not_acquire_new_server_defaults(client):
+    from rallymark_algorithm.models import Job
+
+    data = payload()
+    data["config"] = {"tad_top_k": 200, "timeout_seconds": 2700}
+    response = client.post(
+        "/internal/v1/jobs", json=data, headers={"Authorization": "Bearer test-service-token"}
+    )
+    assert response.status_code == 200
+    with client.app.state.sessions() as session:
+        assert session.get(Job, data["id"]).config == data["config"]

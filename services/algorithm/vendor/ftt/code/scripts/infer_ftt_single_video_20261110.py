@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import time
+import threading
 from collections import defaultdict
 from fractions import Fraction
 from pathlib import Path
@@ -18,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OPENTAD = ROOT / "third_party/OpenTAD"
 sys.path.insert(0, str(OPENTAD))
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import torch
@@ -45,7 +47,9 @@ def probe(path):
     return float(Fraction(stream["avg_frame_rate"])), stream
 
 
-def decode(path, start, end, height, width):
+_readers = threading.local()
+
+def decode(path, start, end, height, width, *, reuse=False):
     import decord
     short = min(height, width)
     out_h = max(160, round(height * 160 / short))
@@ -55,13 +59,18 @@ def decode(path, start, end, height, width):
         idx = np.pad(idx, (0, 768-len(idx)), constant_values=end-1)
     for attempt in range(3):
         try:
-            reader = decord.VideoReader(str(path), width=out_w, height=out_h, num_threads=2)
+            key = (str(path), out_w, out_h)
+            cached = getattr(_readers, 'entry', None)
+            reader = cached[1] if reuse and cached and cached[0] == key else decord.VideoReader(str(path), width=out_w, height=out_h, num_threads=2)
+            if reuse:
+                _readers.entry = (key, reader)
             if len(reader) < end:
                 raise ValueError(f"Decoder has {len(reader)} frames, window ends at {end}")
             frames = reader.get_batch(idx).asnumpy()
             del reader
             break
         except decord.DECORDError:
+            _readers.entry = None
             if attempt == 2:
                 raise
             time.sleep(.25*(attempt+1))
@@ -92,6 +101,9 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, default=ROOT.parent / "weights/ftt_dual_adapter_seed42_epoch35_trainable.pth")
     parser.add_argument("--device", default="cuda:0")
+    parser.add_argument('--decoder-mode', choices=['fresh','reuse','prefetch'], default='fresh')
+    parser.add_argument('--decode-workers', type=int, default=1)
+    parser.add_argument('--prefetch-depth', type=int, default=2)
     args = parser.parse_args()
     args.output = args.output.resolve()
     args.checkpoint = args.checkpoint.resolve()
@@ -109,11 +121,9 @@ def main():
                                    width=width, height=height, windows=len(windows))), flush=True)
 
     cfg = Config.fromfile(str(OPENTAD / "configs/custom/e2e_thumos_vm2g_vj_prefusion_adapters_8gpu_20261030.py"))
-    weights_root = Path(os.environ["WEIGHTS_ROOT"])
-    cfg.model.backbone.branches[0].custom.pretrain = str(
-        weights_root / "vit-giant-p14_videomaev2-hybrid_pt_1200e_k710_ft_my.pth")
-    cfg.model.backbone.branches[1].backbone.ckpt = str(
-        weights_root / "vjepa2_1_vit_g_kdbd_encoder.pt")
+    weights_root = Path(os.environ.get("WEIGHTS_ROOT", str(ROOT.parent / "weights"))).resolve()
+    cfg.model.backbone.branches[0].custom.pretrain = str(weights_root / "vit-giant-p14_videomaev2-hybrid_pt_1200e_k710_ft_my.pth")
+    cfg.model.backbone.branches[1].backbone.ckpt = str(weights_root / "vjepa2_1_vit_g_kdbd_encoder.pt")
     os.chdir(OPENTAD)
     device = torch.device(args.device)
     torch.cuda.set_device(device)
@@ -131,9 +141,15 @@ def main():
 
     merged = {"coarse": [], "fine": []}
     began = time.time()
+    def decode_item(bounds):
+        return decode(args.video, *bounds, height, width, reuse=args.decoder_mode != 'fresh')
+    if args.decoder_mode == 'prefetch':
+        from window_decode import ordered_prefetch
+        decoded = ordered_prefetch(windows, decode_item, args.decode_workers, args.prefetch_depth)
+    else:
+        decoded = ((bounds, decode_item(bounds)) for bounds in windows)
     with torch.inference_mode():
-        for i, (start, end) in enumerate(windows, 1):
-            frames, mask = decode(args.video, start, end, height, width)
+        for i, ((start, end), (frames, mask)) in enumerate(decoded, 1):
             frames = frames.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
             with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -166,6 +182,7 @@ def main():
                    duration_s=frame_count/fps, width=width, height=height,
                    windows=len(windows), checkpoint=str(args.checkpoint), epoch=35,
                    validation_only_model_selection=True, no_ground_truth=True,
+                   decoder_mode=args.decoder_mode, decode_workers=args.decode_workers, prefetch_depth=args.prefetch_depth,
                    inference_seconds=round(time.time()-began, 2),
                    peak_gpu_gib=round(torch.cuda.max_memory_allocated(device)/2**30, 2),
                    counts={task: {"all": len(items), "score_ge_0.3": sum(x["score"] >= .3 for x in items),
