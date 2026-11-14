@@ -21,6 +21,9 @@
 html {
   scrollbar-gutter: stable;
 }
+html:has(:fullscreen) {
+  scrollbar-gutter: auto;
+}
 .select-menu,
 .dialog-content {
   scrollbar-width: thin;

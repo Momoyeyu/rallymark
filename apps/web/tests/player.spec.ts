@@ -320,6 +320,7 @@ test('custom picker keeps its bounds, keyboard selection and modal focus', async
   await page.setViewportSize({ width: 390, height: 320 });
   await picker.focus();
   await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('option').first()).toBeFocused();
   await page.keyboard.press('End');
   await expect(page.getByRole('option').last()).toBeFocused();
   const short = await page.getByRole('listbox').boundingBox();
