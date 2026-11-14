@@ -36,11 +36,11 @@ def test_stable_uuid_lock_does_not_depend_on_local_index():
 
 
 def test_telemetry_fails_closed_and_allowlist_is_enforced():
-    text = "0, GPU-a, RTX 4080 SUPER, 32760, 30000, 0\n1, GPU-b, RTX 4080 SUPER, 32760, 30000, 1\n"
+    text = "0, GPU-a, RTX 4080 SUPER, 32760, 30000, 18, 0\n1, GPU-b, RTX 4080 SUPER, 32760, 30000, 18, 1\n"
     rows = parse_devices(text, "GPU-b", {"GPU-b": 1000})
     assert len(rows) == 1 and rows[0].index == "1" and rows[0].compute_mib == 1000
     assert len(parse_devices(text, "0", {})) == 1
-    for broken in ["0, GPU-a, GPU, 32760, N/A, 0", "0, GPU-a, GPU, 32760, 30000, -1"]:
+    for broken in ["0, GPU-a, GPU, 32760, N/A, 18, 0", "0, GPU-a, GPU, 32760, 30000, 18, -1"]:
         with pytest.raises(ValueError):
             parse_devices(broken, "all", {})
     with pytest.raises(ValueError):
@@ -59,3 +59,11 @@ def test_resource_policy_is_algorithm_only_and_auto_by_default():
 
     assert GpuPoolConfig().max_gpus_per_job == 0
     assert GpuPoolConfig().max_concurrent_jobs == 0
+
+
+def test_host_allocations_are_detected_when_container_cannot_see_foreign_pids():
+    # NVML process enumeration can be empty in a private PID namespace.
+    row = "0, GPU-a, RTX 4080, 32760, 24000, 8500, 0\n"
+    devices = parse_devices(row, "all", {})
+    assert devices[0].used_mib == 8500
+    assert choose_devices(devices, set(), 0, 1, 14, 20) == []

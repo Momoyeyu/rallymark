@@ -144,3 +144,28 @@ def test_external_gpu_saturation_queues_instead_of_becoming_unavailable(client):
     response = client.post("/internal/v1/jobs", json=payload(), headers=headers)
     assert response.status_code == 200
     assert response.json()["attempt"] == 0
+
+
+def test_worker_health_requires_fresh_compatible_dispatcher_but_allows_busy_pool(client):
+    from datetime import timedelta
+
+    from rallymark_algorithm.models import WorkerStatus, utcnow
+    from rallymark_algorithm.worker_health import worker_healthy
+
+    sessions = client.app.state.sessions
+    settings = client.app.state.settings
+    assert not worker_healthy(settings, sessions)
+    with sessions.begin() as session:
+        session.add(
+            WorkerStatus(
+                id="dispatcher",
+                heartbeat_at=utcnow(),
+                gpu_ready=True,
+                version="test-algorithm",
+                capacity={"available": 0, "total": 3},
+            )
+        )
+    assert worker_healthy(settings, sessions)
+    with sessions.begin() as session:
+        session.get(WorkerStatus, "dispatcher").heartbeat_at = utcnow() - timedelta(minutes=5)
+    assert not worker_healthy(settings, sessions)

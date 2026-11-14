@@ -17,6 +17,7 @@ class Device:
     free_mib: int
     utilization: int
     compute_mib: int = 0
+    used_mib: int = 0
 
 
 def parse_devices(output, allowlist, compute):
@@ -24,14 +25,14 @@ def parse_devices(output, allowlist, compute):
     devices = []
     matched = set()
     for row in csv.reader(output.strip().splitlines(), skipinitialspace=True):
-        if len(row) != 6:
+        if len(row) != 7:
             raise ValueError("Invalid GPU telemetry")
-        index, uuid, name, total, free, utilization = row
-        total, free, utilization = int(total), int(free), int(utilization)
-        if total <= 0 or not 0 <= free <= total or not 0 <= utilization <= 100:
+        index, uuid, name, total, free, used, utilization = row
+        total, free, used, utilization = int(total), int(free), int(used), int(utilization)
+        if total <= 0 or not 0 <= free <= total or not 0 <= used <= total or not 0 <= utilization <= 100:
             raise ValueError("Invalid GPU capacity")
         if allowed is None or index in allowed or uuid in allowed:
-            devices.append(Device(index, uuid, name, total, free, utilization, compute.get(uuid, 0)))
+            devices.append(Device(index, uuid, name, total, free, utilization, compute.get(uuid, 0), used))
             matched.update((index, uuid))
     if not devices or allowed and not allowed <= matched:
         raise ValueError("Configured GPU allowlist is unavailable")
@@ -58,7 +59,7 @@ def discover(allowlist):
             raise ValueError("Invalid compute process telemetry")
         compute[row[0]] = compute.get(row[0], 0) + int(row[1])
     return parse_devices(
-        query("index,uuid,name,memory.total,memory.free,utilization.gpu"), allowlist, compute
+        query("index,uuid,name,memory.total,memory.free,memory.used,utilization.gpu"), allowlist, compute
     )
 
 
@@ -70,6 +71,7 @@ def choose_devices(devices, reserved, maximum, queued, minimum_gib, max_utilizat
         and d.free_mib >= minimum_gib * 1024
         and d.utilization <= max_utilization
         and d.compute_mib < 512
+        and d.used_mib < 512
     ]
     available.sort(key=lambda d: (-d.free_mib, d.utilization, d.uuid))
     count = min(maximum or len(available), max(1, len(available) // max(1, queued)))

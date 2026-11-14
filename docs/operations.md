@@ -134,3 +134,9 @@ with older backups that did not include this optional file. GPU reservation
 decisions and their job IDs appear in algorithm JSON logs; per-attempt
 `allocation.json` records the exact devices and resource policy. Public capacity
 returns only ready/busy/unavailable and queue length.
+
+GPU admission also checks device-wide `memory.used`, independently of the process
+list: container PID namespaces can hide host process details from NVML. A card
+with >=512 MiB allocated remains excluded even if no foreign PID is listed. The
+worker container health check requires a fresh, compatible dispatcher heartbeat,
+so deployment cannot pass merely because a crashing worker process was started.

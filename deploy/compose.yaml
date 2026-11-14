@@ -80,6 +80,12 @@ services:
     depends_on: {postgres: {condition: service_healthy}}
     devices:
       - ${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
+    healthcheck:
+      test: [CMD, python, -m, rallymark_algorithm.worker_health]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
   web:
     <<: *common
     image: ${REGISTRY:?required}/web:${VERSION:?required}

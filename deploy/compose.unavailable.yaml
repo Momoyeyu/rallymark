@@ -11,3 +11,5 @@ services:
       - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
     deploy: !reset {}
     devices: !reset []
+    healthcheck:
+      disable: true

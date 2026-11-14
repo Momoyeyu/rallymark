@@ -103,7 +103,10 @@ def execute(job, settings, sessions, worker_id, connection, devices=None):
 def validate_assets(settings):
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         raise RuntimeError("FFmpeg and ffprobe are required")
+    # isort: off
+    import torch  # noqa: F401 - load extension-linked libtorch before native NMS
     import nms_1d_cpu  # noqa: F401 - validate compiled runtime before accepting jobs
+    # isort: on
 
     manifest = json.loads((settings.ftt_root / "SHA256_MANIFEST.json").read_text())
     for name, expected in manifest.items():
@@ -201,6 +204,7 @@ def main():
                                     "free_mib": d.free_mib,
                                     "utilization": d.utilization,
                                     "compute_mib": d.compute_mib,
+                                    "used_mib": d.used_mib,
                                 }
                                 for d in devices
                             ],
