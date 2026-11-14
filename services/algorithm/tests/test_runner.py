@@ -158,6 +158,7 @@ def test_cuda_oom_is_retryable_and_does_not_publish_result(tmp_path):
 def test_explicit_gpu_allocation_is_passed_to_tad_and_ocr(tmp_path, monkeypatch):
     import json
     from types import SimpleNamespace
+
     from rallymark_algorithm import runner
 
     calls = []
@@ -180,7 +181,7 @@ def test_explicit_gpu_allocation_is_passed_to_tad_and_ocr(tmp_path, monkeypatch)
         lambda *a: None,
         ["GPU-a", "GPU-b", "GPU-c"],
     )
-    command, env = calls[0]
+    command, _env = calls[0]
     assert command[1].endswith("infer_multigpu.py")
     assert command[command.index("--devices") + 1] == "GPU-a,GPU-b,GPU-c"
     assert runner.ocr_environment({}, "GPU-c")["CUDA_VISIBLE_DEVICES"] == "GPU-c"
