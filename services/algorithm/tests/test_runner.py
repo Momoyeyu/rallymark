@@ -185,3 +185,23 @@ def test_explicit_gpu_allocation_is_passed_to_tad_and_ocr(tmp_path, monkeypatch)
     assert command[1].endswith("infer_multigpu.py")
     assert command[command.index("--devices") + 1] == "GPU-a,GPU-b,GPU-c"
     assert runner.ocr_environment({}, "GPU-c")["CUDA_VISIBLE_DEVICES"] == "GPU-c"
+
+
+def test_shard_supervisor_oom_reaches_retry_classification(tmp_path):
+    import sys
+    import time
+
+    from rallymark_algorithm.runner import process
+
+    script = FTT / "code/scripts/infer_multigpu.py"
+    code = (
+        "import runpy,subprocess,sys,io;collect=runpy.run_path(" + repr(str(script)) + ")['collect_output'];"
+        "bad=subprocess.Popen([sys.executable,'-c',\"print('CUDA out of memory');raise SystemExit(1)\"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True);"
+        "bad.wait();peer=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True);"
+        "collect([bad,peer],[io.StringIO(),io.StringIO()])"
+    )
+    with pytest.raises(AnalysisFailure) as raised:
+        process(
+            [sys.executable, "-c", code], tmp_path / "supervisor.log", time.monotonic() + 10, lambda: None
+        )
+    assert raised.value.code == "gpu_out_of_memory" and raised.value.retryable

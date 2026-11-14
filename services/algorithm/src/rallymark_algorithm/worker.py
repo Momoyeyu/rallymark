@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from sqlalchemy import text
 
-from .db import claim_job, database, gpu_lock
+from .db import claim_job, database, gpu_lock, recover_expired, reservation_database
 from .gpu_pool import Reservation, choose_devices, discover
 from .models import Job, WorkerStatus, utcnow
 from .ops import cleanup
@@ -125,6 +125,7 @@ def main():
     settings = Settings.load()
     configure_logging(settings.log_level)
     engine, sessions = database(settings.database_url)
+    lock_engine = reservation_database(settings.database_url)
     worker_id = str(uuid.uuid4())
     stopping = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stopping.set())
@@ -177,6 +178,7 @@ def main():
                         logger.exception("gpu_telemetry_failed")
                 available = choose_devices(devices, reserved, 0, 1, minimum, pool.max_utilization)
                 with sessions.begin() as session:
+                    recover_expired(session, settings.algorithm.max_attempts)
                     session.merge(
                         WorkerStatus(
                             id=worker_id,
@@ -216,7 +218,7 @@ def main():
                         devices, reserved, pool.max_gpus_per_job, queued, minimum, pool.max_utilization
                     )
                     if candidates or not real:
-                        reservation = Reservation(engine, candidates)
+                        reservation = Reservation(lock_engine, candidates)
                         submitted = False
                         try:
                             if real:

@@ -18,7 +18,7 @@ class ApplicationConfig(BaseModel):
 
 class AlgorithmConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    version: str = "ftt-4781dc8"
+    version: str = "ftt-3e05fd4"
     tad_top_k: int = Field(default=200, ge=1, le=200)
     nearby_seconds: float = Field(default=9, ge=1, le=30)
     protect_top_m: int = Field(default=100, ge=0, le=200)

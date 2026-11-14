@@ -80,3 +80,43 @@ def test_gpu_uuid_reservation_is_exclusive_and_released(sessions):
         assert c.devices == [device]
     finally:
         c.close()
+
+
+def test_recovery_without_any_gpu_requeues_or_exhausts_without_new_attempt(sessions):
+    from rallymark_algorithm.db import recover_expired
+
+    retryable = job(status="tad", attempt=1, worker_id="lost", lease_until=utcnow() - timedelta(seconds=5))
+    exhausted = job(status="ocr", attempt=2, worker_id="lost", lease_until=utcnow() - timedelta(seconds=5))
+    with sessions.begin() as session:
+        session.add_all([retryable, exhausted])
+    with sessions.begin() as session:
+        recover_expired(session, 2)
+    with sessions() as session:
+        a, b = session.get(Job, retryable.id), session.get(Job, exhausted.id)
+        assert (a.status, a.attempt, a.worker_id, a.lease_until) == ("queued", 1, None, None)
+        assert (b.status, b.attempt, b.worker_id, b.lease_until) == ("failed", 2, None, None)
+
+
+def test_reservations_do_not_exhaust_transaction_pool(sessions):
+    from rallymark_algorithm.db import reservation_database
+    from rallymark_algorithm.gpu_pool import Device, Reservation
+
+    locks = reservation_database(sessions.kw["bind"].url)
+    transactions = create_engine(sessions.kw["bind"].url, pool_size=1, max_overflow=0, pool_timeout=0.2)
+    reservations = []
+    pinned = transactions.connect()
+    try:
+        for i in range(3):
+            reservations.append(
+                Reservation(locks, [Device(str(i), "GPU-" + uuid.uuid4().hex, "test", 32760, 30000, 0)])
+            )
+        assert pinned.scalar(text("SELECT 1")) == 1
+        pinned.close()
+        with transactions.begin() as connection:
+            assert connection.scalar(text("SELECT 1")) == 1
+    finally:
+        pinned.close()
+        for reservation in reservations:
+            reservation.close()
+        transactions.dispose()
+        locks.dispose()

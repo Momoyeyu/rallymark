@@ -42,7 +42,7 @@ class InferenceConfig(BaseModel):
 
 
 class AlgorithmConfig(InferenceConfig):
-    version: str = "ftt-4781dc8"
+    version: str = "ftt-3e05fd4"
     lease_seconds: int = Field(default=60, ge=10)
     max_attempts: int = Field(default=2, ge=1, le=5)
     runner: str = Field(default="real", pattern="^(real|fake)$")

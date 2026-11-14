@@ -15,6 +15,59 @@ import time
 from pathlib import Path
 
 
+def collect_output(children, logs):
+    from collections import deque
+
+    lines = queue.Queue()
+    tails = [deque(maxlen=32) for _ in children]
+    progress = [0] * len(children)
+    totals = [None] * len(children)
+    threads = []
+    failed_at = None
+
+    def read(index, stream):
+        for line in stream:
+            lines.put((index, line))
+
+    for index, child in enumerate(children):
+        thread = threading.Thread(target=read, args=(index, child.stdout), daemon=True)
+        thread.start()
+        threads.append(thread)
+    while (
+        any(c.poll() is None for c in children)
+        or any(t.is_alive() for t in threads)
+        or not lines.empty()
+    ):
+        if failed_at is None and any(c.poll() not in (None, 0) for c in children):
+            failed_at = time.monotonic()
+            for child in children:
+                if child.poll() is None:
+                    child.terminate()
+        if failed_at is not None and time.monotonic() - failed_at > 10:
+            for child in children:
+                if child.poll() is None:
+                    child.kill()
+        try:
+            index, line = lines.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        tails[index].append(line)
+        logs[index].write(line)
+        logs[index].flush()
+        match = re.match(r"INFER_WINDOW\s+(\d+)\s+(\d+)", line)
+        if match:
+            progress[index], totals[index] = map(int, match.groups())
+            if all(t is not None for t in totals):
+                print("INFER_WINDOW", sum(progress), sum(totals), flush=True)
+    if any(child.returncode for child in children):
+        for tail in tails:
+            print("".join(tail), flush=True)
+        # Always forward the structured cause last, beyond peer traceback noise.
+        if any("out of memory" in "".join(tail).lower() for tail in tails):
+            print("FTT_FAILURE gpu_out_of_memory: CUDA out of memory", flush=True)
+        raise RuntimeError("TAD shard failed; no partial result published")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", type=Path, required=True)
@@ -28,7 +81,11 @@ def main():
     )
     args = parser.parse_args()
     devices = args.devices.split(",")
-    if len(devices) != len(set(devices)) or not devices or any(not device for device in devices):
+    if (
+        len(devices) != len(set(devices))
+        or not devices
+        or any(not device for device in devices)
+    ):
         parser.error("Select distinct reserved GPUs")
     # isort: off
     import torch  # noqa: F401 - load before Decord, matching the validated loader
@@ -44,23 +101,13 @@ def main():
     devices = devices[:count]
     args.output.mkdir(parents=True, exist_ok=True)
     script = Path(__file__).with_name("infer_ftt_single_video_20261110.py")
-    children, logs, threads = [], [], []
-    lines = queue.Queue()
-    from collections import deque
-
-    tails = [deque(maxlen=32) for _ in devices]
-    progress = [0] * len(devices)
-    totals = [None] * len(devices)
+    children, logs = [], []
     start = time.monotonic()
 
     def interrupted(*_):
         raise InterruptedError("Multi-GPU inference interrupted")
 
     signal.signal(signal.SIGTERM, interrupted)
-
-    def read(index, stream):
-        for line in stream:
-            lines.put((index, line))
 
     try:
         for index, device in enumerate(devices):
@@ -95,35 +142,7 @@ def main():
             )
             children.append(child)
             logs.append((args.output / f"shard-{index}.log").open("w"))
-            thread = threading.Thread(
-                target=read, args=(index, child.stdout), daemon=True
-            )
-            thread.start()
-            threads.append(thread)
-        while (
-            any(c.poll() is None for c in children)
-            or any(t.is_alive() for t in threads)
-            or not lines.empty()
-        ):
-            if any(c.poll() not in (None, 0) for c in children):
-                for i, child in enumerate(children):
-                    if child.poll() not in (None, 0):
-                        print("".join(tails[i]), flush=True)
-                raise RuntimeError("TAD shard failed; no partial result published")
-            try:
-                index, line = lines.get(timeout=0.2)
-            except queue.Empty:
-                continue
-            tails[index].append(line)
-            logs[index].write(line)
-            logs[index].flush()
-            match = re.match(r"INFER_WINDOW\s+(\d+)\s+(\d+)", line)
-            if match:
-                progress[index], totals[index] = map(int, match.groups())
-                if all(t is not None for t in totals):
-                    print("INFER_WINDOW", sum(progress), sum(totals), flush=True)
-        if any(c.returncode for c in children):
-            raise RuntimeError("TAD shard failed")
+        collect_output(children, logs)
         spec = importlib.util.spec_from_file_location("ftt_merge", script)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

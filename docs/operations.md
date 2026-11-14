@@ -140,3 +140,9 @@ list: container PID namespaces can hide host process details from NVML. A card
 with >=512 MiB allocated remains excluded even if no foreign PID is listed. The
 worker container health check requires a fresh, compatible dispatcher heartbeat,
 so deployment cannot pass merely because a crashing worker process was started.
+
+Expired job leases are recovered on every dispatcher iteration, even with no
+eligible GPU. GPU advisory-lock connections use a separate unpooled engine so
+long-running reservations do not consume transactional connection-pool capacity.
+For unusually large installations, provision PostgreSQL connection limits and
+use the optional concurrency cap to fit the database and host RAM budget.

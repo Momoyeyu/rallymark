@@ -5,7 +5,7 @@ application:
   session_cookie_secure: false
   poll_seconds: 2
 algorithm:
-  version: ftt-4781dc8
+  version: ftt-3e05fd4
   tad_top_k: 200
   nearby_seconds: 9
   protect_top_m: 100
