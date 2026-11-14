@@ -25,3 +25,10 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
 - GPU maintenance uses `GPU_MODE=disabled`, not a fake runner. API database
   readiness and authenticated worker capacity are distinct. Public errors must
   be sanitized and correlated with backend logs; busy workers accept queues.
+- GPU discovery, admission, UUID reservations and allocation policy belong only to
+  the algorithm service. Business code consumes generic capacity/task state.
+  Resource settings live in `deploy/gpu-pool.yaml`; zero caps mean runtime auto.
+- Keep only the latest local preview and canonical original inputs. Preserve GT,
+  metadata, metrics, screenshots and source provenance; prune superseded encoded
+  videos and duplicate release copies after verification. This local policy does
+  not authorize deleting remote deployment volumes or rollback images.

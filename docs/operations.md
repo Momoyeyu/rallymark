@@ -146,3 +146,21 @@ eligible GPU. GPU advisory-lock connections use a separate unpooled engine so
 long-running reservations do not consume transactional connection-pool capacity.
 For unusually large installations, provision PostgreSQL connection limits and
 use the optional concurrency cap to fit the database and host RAM budget.
+
+## Local experiment retention
+
+Keep one canonical copy of each original video and its ground truth, the latest
+preview manifest, analysis metadata, metrics, reports and quality screenshots.
+After a rejected compression/playback experiment has been evaluated, remove its
+generated video variants and unused local release builds. Original aliases that
+are still referenced may be hardlinks to the canonical file after SHA-256 checks.
+Retain unique source/configuration and database backups before retiring an older
+machine archive; model assets are deduplicated by checksum, not dropped by date.
+This policy applies locally. Remote media cleanup still goes through `make
+data-clean`, and deployed rollback images/volumes remain governed by the release
+procedure.
+
+The default preview export reads the single current `.runtime/preview-source`
+dataset. Its `review/` metadata is paired by SHA-256 with canonical `.runtime/inputs`
+originals; `videos` is a relative alias. Use `EXPERIMENT=...` explicitly to export
+a historical experiment, rather than silently replacing the latest preview.
