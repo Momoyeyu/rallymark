@@ -59,3 +59,24 @@ def test_claim_skips_locked_and_recovers_stale_lease(sessions):
     with sessions.begin() as session:
         assert claim_job(session, "third", 60, 2) is None
         assert session.get(Job, one.id).status == "failed"
+
+
+def test_gpu_uuid_reservation_is_exclusive_and_released(sessions):
+    from rallymark_algorithm.gpu_pool import Device, Reservation
+
+    engine = sessions.kw["bind"]
+    uuid_key = "GPU-test-" + uuid.uuid4().hex
+    device = Device("0", uuid_key, "test", 32760, 30000, 0)
+    a = Reservation(engine, [device])
+    b = Reservation(engine, [device])
+    try:
+        assert a.devices == [device]
+        assert b.devices == []
+    finally:
+        a.close()
+        b.close()
+    c = Reservation(engine, [device])
+    try:
+        assert c.devices == [device]
+    finally:
+        c.close()

@@ -67,20 +67,19 @@ services:
     image: ${REGISTRY:?required}/algorithm-worker:${VERSION:?required}
     build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: worker}
     command: [python, -m, rallymark_algorithm.worker]
-    environment: *algorithm-env
+    environment:
+      <<: *algorithm-env
+      GPU_DEVICE: ${GPU_DEVICE:-all}
+      GPU_POOL_PATH: /app/gpu-pool.yaml
     shm_size: 2gb
     volumes:
       - algorithm-work:/data/work
       - ${WEIGHTS_PATH:?required}:/models:ro
+      - ${GPU_POOL_FILE:-./gpu-pool.yaml}:/app/gpu-pool.yaml:ro
       - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
     depends_on: {postgres: {condition: service_healthy}}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['${GPU_DEVICE:?required}']
-              capabilities: [gpu]
+    devices:
+      - ${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
   web:
     <<: *common
     image: ${REGISTRY:?required}/web:${VERSION:?required}

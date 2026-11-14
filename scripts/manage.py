@@ -68,6 +68,9 @@ def forward_remote(action):
         "WEIGHTS_PATH",
         "MIN_GPU_MEMORY_GIB",
         "GPU_MODE",
+        "GPU_POOL_FILE",
+        "GPU_CDI_DEVICE",
+        "CONFIG_SCOPE",
         "PREVIEW_PORT",
         "PREVIEW_DATA_PATH",
     ):
@@ -193,21 +196,22 @@ def gpu_preflight(*, require_free=True):
     output = run(
         [
             "nvidia-smi",
-            "--id=" + device,
+            *(["--id=" + device] if device != "all" else []),
             "--query-gpu=name,uuid,memory.total,memory.free",
             "--format=csv,noheader,nounits",
         ],
         capture=True,
     )
     rows = list(csv.reader(output.strip().splitlines(), skipinitialspace=True))
-    if len(rows) != 1 or len(rows[0]) != 4:
-        raise RuntimeError("GPU_DEVICE must select exactly one GPU")
-    name, identifier, total, free = rows[0]
-    if float(total) / 1024 < minimum:
-        raise RuntimeError(f"Assigned GPU needs {minimum:g} GiB total memory")
-    if require_free and float(free) / 1024 < minimum:
-        raise RuntimeError(f"Assigned GPU needs {minimum:g} GiB free memory")
-    print(json.dumps({"gpu": name, "uuid": identifier, "free_gib": float(free) / 1024}))
+    if not rows or any(len(row) != 4 for row in rows):
+        raise RuntimeError("GPU_DEVICE selects no usable GPU telemetry")
+    capable = [row for row in rows if float(row[2]) / 1024 >= minimum]
+    if not capable:
+        raise RuntimeError(f"Assigned GPU pool needs at least one card with {minimum:g} GiB total memory")
+    if require_free and not any(float(row[3]) / 1024 >= minimum for row in capable):
+        raise RuntimeError(f"Assigned GPU pool needs {minimum:g} GiB free memory")
+    for name, identifier, total, free in capable:
+        print(json.dumps({"gpu": name, "uuid": identifier, "free_gib": float(free) / 1024}))
 
 
 def deploy(version, *, build=False, pull=False):
@@ -267,12 +271,21 @@ def config_check():
         "run",
         "--rm",
         "--no-deps",
+        "--volume",
+        str(gpu_pool_path()) + ":/app/gpu-pool.yaml:ro",
+        "--env",
+        "GPU_POOL_PATH=/app/gpu-pool.yaml",
         "algorithm",
         "python",
         "-c",
         "from rallymark_algorithm.settings import Settings; "
         "Settings.load(); print('Algorithm configuration valid')",
     )
+
+
+def gpu_pool_path():
+    path = Path(os.environ.get("GPU_POOL_FILE") or "./gpu-pool.yaml")
+    return path if path.is_absolute() else ROOT / "deploy" / path
 
 
 def configured_path():
@@ -302,6 +315,8 @@ def backup():
     shutil.copy2(ENV, target / "deploy.env")
     config = configured_path()
     shutil.copy2(config, target / "config.yaml")
+    if gpu_pool_path().exists():
+        shutil.copy2(gpu_pool_path(), target / "gpu-pool.yaml")
     if (version_directory() / "current-version").exists():
         shutil.copy2(version_directory() / "current-version", target / "version")
     for file in target.iterdir():
@@ -373,6 +388,8 @@ def restore():
     )
     config = configured_path()
     config.write_bytes(restored_config)
+    if (source / "gpu-pool.yaml").is_file():
+        gpu_pool_path().write_bytes((source / "gpu-pool.yaml").read_bytes())
     os.environ["VERSION"] = restore_version
     compose("up", "-d", "--force-recreate", "--wait", "--wait-timeout", "180")
     version_directory().mkdir(parents=True, mode=0o700, exist_ok=True)
@@ -472,7 +489,8 @@ def main():
             gpu_preflight()
         print("Free disk bytes:", shutil.disk_usage(ROOT).free)
     elif action == "config-edit":
-        run([*shlex.split(os.environ.get("EDITOR", "vi")), configured_path()])
+        path = gpu_pool_path() if os.environ.get("CONFIG_SCOPE") == "algorithm" else configured_path()
+        run([*shlex.split(os.environ.get("EDITOR", "vi")), path])
     elif action == "config-check":
         config_check()
     elif action == "config-apply":

@@ -46,7 +46,7 @@ class OpsReview(unittest.TestCase):
 
     def test_invalid_algorithm_configuration_does_not_drain(self):
         def compose(*args, **kwargs):
-            if args[:4] == ("run", "--rm", "--no-deps", "algorithm"):
+            if args[0] == "run" and "algorithm" in args:
                 raise subprocess.CalledProcessError(1, args)
 
         with (

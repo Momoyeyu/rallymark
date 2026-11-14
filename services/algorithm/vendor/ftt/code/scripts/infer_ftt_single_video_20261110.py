@@ -104,6 +104,8 @@ def main():
     parser.add_argument('--decoder-mode', choices=['fresh','reuse','prefetch'], default='fresh')
     parser.add_argument('--decode-workers', type=int, default=1)
     parser.add_argument('--prefetch-depth', type=int, default=2)
+    parser.add_argument('--shard-index', type=int, default=0)
+    parser.add_argument('--shard-count', type=int, default=1)
     args = parser.parse_args()
     args.output = args.output.resolve()
     args.checkpoint = args.checkpoint.resolve()
@@ -117,6 +119,9 @@ def main():
     del reader
     height, width = video_dimensions(str(args.video))
     windows = frame_windows(frame_count, length=768, stride=384)
+    global_windows = len(windows)
+    from window_partition import select_windows
+    windows = select_windows(windows, args.shard_index, args.shard_count)
     print("VIDEO", json.dumps(dict(fps=fps, frames=frame_count, seconds=frame_count/fps,
                                    width=width, height=height, windows=len(windows))), flush=True)
 
@@ -161,6 +166,8 @@ def main():
                 print("INFER_WINDOW", i, len(windows), "seconds", round(time.time()-began, 1),
                       "max_gib", round(torch.cuda.max_memory_allocated(device)/2**30, 2), flush=True)
 
+    if args.shard_count > 1:
+        (args.output / "raw_predictions.json").write_text(json.dumps(merged))
     ann = ROOT / "data/ftt/sgp_bmp_vm2_20class_v1"
     parent_names = (ann / "coarse_class_map.txt").read_text().splitlines()
     action_names = (ann / "fine_class_map.txt").read_text().splitlines()
@@ -180,7 +187,8 @@ def main():
             writer.writerows(x for x in items if x["score"] >= .3)
     summary = dict(video=str(args.video), fps=fps, frames=frame_count,
                    duration_s=frame_count/fps, width=width, height=height,
-                   windows=len(windows), checkpoint=str(args.checkpoint), epoch=35,
+                   windows=len(windows), global_windows=global_windows,
+                   shard_index=args.shard_index, shard_count=args.shard_count, checkpoint=str(args.checkpoint), epoch=35,
                    validation_only_model_selection=True, no_ground_truth=True,
                    decoder_mode=args.decoder_mode, decode_workers=args.decode_workers, prefetch_depth=args.prefetch_depth,
                    inference_seconds=round(time.time()-began, 2),

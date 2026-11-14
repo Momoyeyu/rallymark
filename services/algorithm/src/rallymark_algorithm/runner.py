@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -45,6 +46,7 @@ def parallel_branches(tad, ocr, check):
 
 def process(command, log_path, deadline, check, progress=None, env=None):
     lines = queue.Queue()
+    tail = deque(maxlen=64)
     with log_path.open("a") as log:
         child = subprocess.Popen(
             command,
@@ -70,12 +72,17 @@ def process(command, log_path, deadline, check, progress=None, env=None):
                     line = lines.get(timeout=0.25)
                 except queue.Empty:
                     continue
+                tail.append(line)
                 log.write(line)
                 log.flush()
                 match = re.match(r"INFER_WINDOW\s+(\d+)\s+(\d+)", line)
                 if match and progress:
                     progress("tad", int(match[1]), int(match[2]))
             if child.returncode:
+                if "out of memory" in "".join(tail).lower():
+                    raise AnalysisFailure(
+                        "gpu_out_of_memory", "GPU capacity changed during analysis", retryable=True
+                    )
                 raise AnalysisFailure("inference_failed", "Algorithm process failed; see task log")
         finally:
             if child.poll() is None:
@@ -135,8 +142,10 @@ def fuse_predictions(settings, config, tad, ocr, duration, observations=None):
     )
 
 
-def ocr_environment(config):
+def ocr_environment(config, device=None):
     env = dict(os.environ)
+    if device is not None:
+        env["CUDA_VISIBLE_DEVICES"] = device
     if config.get("ocr_execution_provider", "cpu") == "cuda":
         libraries = [str(path) for root in sys.path if root for path in Path(root).glob("nvidia/*/lib")]
         if env.get("LD_LIBRARY_PATH"):
@@ -145,7 +154,7 @@ def ocr_environment(config):
     return env
 
 
-def run_tad(video, attempt, settings, config, deadline, check, progress):
+def run_tad(video, attempt, settings, config, deadline, check, progress, devices=None):
     tad_dir = attempt / "tad"
     command = [
         sys.executable,
@@ -170,11 +179,18 @@ def run_tad(video, attempt, settings, config, deadline, check, progress):
         ]
     )
     env = dict(os.environ, WEIGHTS_ROOT=str(settings.weights_root))
+    if devices:
+        if len(devices) > 1:
+            command[1] = str(settings.ftt_root / "code/scripts/infer_multigpu.py")
+            position = command.index("--device")
+            command[position : position + 2] = ["--devices", ",".join(devices)]
+        else:
+            env["CUDA_VISIBLE_DEVICES"] = devices[0]
     process(command, attempt / "tad.log", deadline, check, progress, env=env)
     return json.loads((tad_dir / "predictions.json").read_text())["rallies"]
 
 
-def run_ocr(video, attempt, stream, settings, config, deadline, check):
+def run_ocr(video, attempt, stream, settings, config, deadline, check, device=None):
     ocr = []
     warnings = []
     observations = None
@@ -226,7 +242,7 @@ def run_ocr(video, attempt, stream, settings, config, deadline, check):
                     attempt / "ocr.log",
                     deadline,
                     check,
-                    env=ocr_environment({"ocr_execution_provider": provider}),
+                    env=ocr_environment({"ocr_execution_provider": provider}, device),
                 )
                 ocr = json.loads((attempt / "ocr/predictions.json").read_text())["rallies"]
                 observations = json.loads((attempt / "ocr/observations.json").read_text())
@@ -246,12 +262,15 @@ def run_ocr(video, attempt, stream, settings, config, deadline, check):
     return ocr, observations, warnings
 
 
-def run_analysis(job, settings, progress, check):
+def run_analysis(job, settings, progress, check, devices=None):
     config = job.config
     started = time.monotonic()
     deadline = started + config["timeout_seconds"]
     attempt = settings.work_root / job.id / (f"attempt-{job.attempt}")
     attempt.mkdir(parents=True, exist_ok=False)
+    (attempt / "allocation.json").write_text(
+        json.dumps({"gpu_devices": devices or [], "policy": settings.gpu_pool.model_dump()})
+    )
     video = attempt / "input.mp4"
     digest = hashlib.sha256()
     try:
@@ -305,13 +324,22 @@ def run_analysis(job, settings, progress, check):
         ocr_finished = threading.Event()
 
         def tad_branch(branch_check):
-            result = run_tad(video, attempt, settings, config, deadline, branch_check, progress)
+            result = run_tad(video, attempt, settings, config, deadline, branch_check, progress, devices)
             if not ocr_finished.is_set():
                 progress("ocr")
             return result
 
         def ocr_branch(branch_check):
-            result = run_ocr(video, attempt, stream, settings, config, deadline, branch_check)
+            result = run_ocr(
+                video,
+                attempt,
+                stream,
+                settings,
+                config,
+                deadline,
+                branch_check,
+                devices[0] if devices else None,
+            )
             ocr_finished.set()
             return result
 

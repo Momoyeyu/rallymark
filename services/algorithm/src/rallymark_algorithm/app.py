@@ -91,12 +91,13 @@ def create_app(settings=None, sessions=None):
                     WorkerStatus.gpu_ready.is_(True),
                     WorkerStatus.version == settings.algorithm.version,
                 )
-                .count()
+                .all()
             )
             queued = session.query(Job).filter(Job.status == "queued").count()
             active = session.query(Job).filter(Job.status.in_(ACTIVE)).count()
+        available = sum((worker.capacity or {"available": 1}).get("available", 0) for worker in workers)
         return {
-            "state": ("busy" if active or queued else "ready") if workers else "unavailable",
+            "state": ("busy" if active or queued or not available else "ready") if workers else "unavailable",
             "queued": queued,
         }
 

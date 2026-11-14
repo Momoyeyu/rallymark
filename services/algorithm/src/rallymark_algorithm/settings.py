@@ -42,10 +42,19 @@ class InferenceConfig(BaseModel):
 
 
 class AlgorithmConfig(InferenceConfig):
-    version: str = "ftt-a5143b9"
+    version: str = "ftt-4781dc8"
     lease_seconds: int = Field(default=60, ge=10)
     max_attempts: int = Field(default=2, ge=1, le=5)
     runner: str = Field(default="real", pattern="^(real|fake)$")
+
+
+class GpuPoolConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    max_gpus_per_job: int = Field(default=0, ge=0, le=256)
+    max_concurrent_jobs: int = Field(default=0, ge=0, le=256)
+    admission_memory_gib: float = Field(default=14, ge=12, le=256)
+    max_utilization: int = Field(default=20, ge=0, le=100)
+    poll_seconds: float = Field(default=2, ge=0.5, le=30)
 
 
 class Settings(BaseModel):
@@ -59,6 +68,8 @@ class Settings(BaseModel):
     environment: str = "production"
     log_level: str = "INFO"
     retention_days: int = Field(default=7, ge=1)
+    gpu_device: str = "0"
+    gpu_pool: GpuPoolConfig = Field(default_factory=GpuPoolConfig)
     min_gpu_memory_gib: float = Field(default=12, gt=0, le=256)
 
     @model_validator(mode="after")
@@ -85,6 +96,10 @@ class Settings(BaseModel):
             environment=os.environ.get("ENVIRONMENT", "production"),
             log_level=raw.get("logging", {}).get("level", "INFO"),
             retention_days=raw.get("application", {}).get("retention_days", 7),
+            gpu_device=os.environ.get("GPU_DEVICE", "0"),
+            gpu_pool=yaml.safe_load(Path(os.environ["GPU_POOL_PATH"]).read_text())
+            if os.environ.get("GPU_POOL_PATH")
+            else {},
             min_gpu_memory_gib=os.environ.get("MIN_GPU_MEMORY_GIB", "12"),
         )
         return settings
@@ -115,6 +130,11 @@ class JsonFormatter(logging.Formatter):
             "gpu_name",
             "gpu_memory_gib",
             "gpu_free_gib",
+            "gpu_devices",
+            "gpu_status",
+            "available_gpus",
+            "queued",
+            "active",
         ):
             if hasattr(record, key):
                 entry[key] = getattr(record, key)

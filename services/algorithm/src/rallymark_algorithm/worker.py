@@ -6,21 +6,22 @@ import signal
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 from sqlalchemy import text
 
 from .db import claim_job, database, gpu_lock
+from .gpu_pool import Reservation, choose_devices, discover
 from .models import Job, WorkerStatus, utcnow
 from .ops import cleanup
 from .runner import AnalysisFailure, run_analysis
-from .runtime import validate_gpu
 from .settings import Settings, configure_logging
 
 logger = logging.getLogger(__name__)
 
 
-def execute(job, settings, sessions, worker_id, connection):
+def execute(job, settings, sessions, worker_id, connection, devices=None):
     lost = threading.Event()
     stopped = threading.Event()
     errors = []
@@ -59,7 +60,7 @@ def execute(job, settings, sessions, worker_id, connection):
     thread.start()
     began = time.monotonic()
     try:
-        result = run_analysis(job, settings, progress, check)
+        result = run_analysis(job, settings, progress, check, devices)
         check()
         with sessions.begin() as session:
             current = session.get(Job, job.id)
@@ -99,6 +100,24 @@ def execute(job, settings, sessions, worker_id, connection):
         thread.join(timeout=5)
 
 
+def validate_assets(settings):
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        raise RuntimeError("FFmpeg and ffprobe are required")
+    import nms_1d_cpu  # noqa: F401 - validate compiled runtime before accepting jobs
+
+    manifest = json.loads((settings.ftt_root / "SHA256_MANIFEST.json").read_text())
+    for name, expected in manifest.items():
+        if not name.startswith("weights/"):
+            continue
+        file = settings.weights_root / name.split("/", 1)[1]
+        digest = hashlib.sha256()
+        with file.open("rb") as stream:
+            for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+                digest.update(block)
+        if file.stat().st_size != expected["bytes"] or digest.hexdigest() != expected["sha256"]:
+            raise RuntimeError("Model asset checksum mismatch: " + file.name)
+
+
 def main():
     settings = Settings.load()
     configure_logging(settings.log_level)
@@ -108,52 +127,138 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: stopping.set())
     signal.signal(signal.SIGINT, lambda *_: stopping.set())
     settings.work_root.mkdir(parents=True, exist_ok=True)
-    if settings.algorithm.runner == "real":
-        import torch
-
-        if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
-            raise RuntimeError("FFmpeg and ffprobe are required")
-        import nms_1d_cpu  # noqa: F401 - validate the compiled runtime before accepting jobs
-
-        gpu = validate_gpu(torch.cuda, settings.min_gpu_memory_gib)
-        manifest = json.loads((settings.ftt_root / "SHA256_MANIFEST.json").read_text())
-        for name, expected in manifest.items():
-            if not name.startswith("weights/"):
-                continue
-            file = settings.weights_root / name.split("/", 1)[1]
-            digest = hashlib.sha256()
-            with file.open("rb") as stream:
-                for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-                    digest.update(block)
-            if file.stat().st_size != expected["bytes"] or digest.hexdigest() != expected["sha256"]:
-                raise RuntimeError("Model asset checksum mismatch: " + file.name)
-        logger.info("gpu_ready", extra=gpu)
+    real = settings.algorithm.runner == "real"
+    if real:
+        validate_assets(settings)
+    pool = settings.gpu_pool
+    minimum = max(settings.min_gpu_memory_gib, pool.admission_memory_gib)
     last_cleanup = 0.0
-    with gpu_lock(engine) as connection:
-        while not stopping.is_set():
-            if time.monotonic() - last_cleanup > 3600:
-                cleanup(settings, sessions, apply=True)
-                last_cleanup = time.monotonic()
-            with sessions.begin() as session:
-                session.merge(
-                    WorkerStatus(
-                        id=worker_id,
-                        heartbeat_at=utcnow(),
-                        gpu_ready=True,
-                        version=settings.algorithm.version,
+    previous_state = None
+    futures = {}
+
+    def run_reserved(job, reservation):
+        try:
+            devices = [device.uuid for device in reservation.devices] if real else None
+            execute(job, settings, sessions, worker_id, reservation.connection, devices)
+        finally:
+            reservation.close()
+
+    # Retain the original dispatcher fence across upgrades; individual devices also
+    # have UUID locks whose sessions heartbeat with the running job's lease.
+    with (
+        gpu_lock(engine) as dispatcher,
+        ThreadPoolExecutor(max_workers=pool.max_concurrent_jobs or 256) as executor,
+    ):
+        try:
+            while not stopping.is_set():
+                dispatcher.execute(text("SELECT 1"))
+                for future in list(futures):
+                    if future.done():
+                        future.result()
+                        del futures[future]
+                if time.monotonic() - last_cleanup > 3600:
+                    cleanup(settings, sessions, apply=True)
+                    last_cleanup = time.monotonic()
+                reserved = {uuid for allocation in futures.values() for uuid in allocation}
+                devices = []
+                ready = not real
+                if real:
+                    try:
+                        devices = discover(settings.gpu_device)
+                        ready = any(device.total_mib >= minimum * 1024 for device in devices)
+                    except (OSError, ValueError, RuntimeError) as error:
+                        logger.warning(
+                            "gpu_telemetry_unavailable", extra={"error_code": type(error).__name__}
+                        )
+                    except Exception:
+                        logger.exception("gpu_telemetry_failed")
+                available = choose_devices(devices, reserved, 0, 1, minimum, pool.max_utilization)
+                with sessions.begin() as session:
+                    session.merge(
+                        WorkerStatus(
+                            id=worker_id,
+                            heartbeat_at=utcnow(),
+                            gpu_ready=ready,
+                            capacity={
+                                "available": len(available) if real else 1,
+                                "total": len(devices) if real else 1,
+                            },
+                            version=settings.algorithm.version,
+                        )
                     )
-                )
-                job = claim_job(
-                    session, worker_id, settings.algorithm.lease_seconds, settings.algorithm.max_attempts
-                )
-            if job:
-                execute(job, settings, sessions, worker_id, connection)
-            else:
-                stopping.wait(1)
-        with sessions.begin() as session:
-            worker = session.get(WorkerStatus, worker_id)
-            if worker:
-                session.delete(worker)
+                    queued = session.query(Job).filter(Job.status == "queued").count()
+                state = (ready, tuple(d.uuid for d in available), len(futures), queued)
+                if state != previous_state:
+                    logger.info(
+                        "gpu_pool_state",
+                        extra={
+                            "available_gpus": len(available),
+                            "active": len(futures),
+                            "queued": queued,
+                            "gpu_status": [
+                                {
+                                    "uuid": d.uuid,
+                                    "free_mib": d.free_mib,
+                                    "utilization": d.utilization,
+                                    "compute_mib": d.compute_mib,
+                                }
+                                for d in devices
+                            ],
+                        },
+                    )
+                    previous_state = state
+                if ready and len(futures) < (pool.max_concurrent_jobs or max(1, len(devices))):
+                    candidates = choose_devices(
+                        devices, reserved, pool.max_gpus_per_job, queued, minimum, pool.max_utilization
+                    )
+                    if candidates or not real:
+                        reservation = Reservation(engine, candidates)
+                        submitted = False
+                        try:
+                            if real:
+                                valid = {
+                                    d.uuid
+                                    for d in choose_devices(
+                                        discover(settings.gpu_device),
+                                        set(),
+                                        0,
+                                        1,
+                                        minimum,
+                                        pool.max_utilization,
+                                    )
+                                }
+                                if not reservation.devices or any(
+                                    d.uuid not in valid for d in reservation.devices
+                                ):
+                                    stopping.wait(pool.poll_seconds)
+                                    continue
+                            # claim_job also recovers expired attempts, even with no queued rows.
+                            with sessions.begin() as session:
+                                job = claim_job(
+                                    session,
+                                    worker_id,
+                                    settings.algorithm.lease_seconds,
+                                    settings.algorithm.max_attempts,
+                                )
+                            if job:
+                                allocation = [device.uuid for device in reservation.devices]
+                                logger.info(
+                                    "gpu_allocation", extra={"job_id": job.id, "gpu_devices": allocation}
+                                )
+                                future = executor.submit(run_reserved, job, reservation)
+                                futures[future] = allocation
+                                submitted = True
+                        finally:
+                            if not submitted:
+                                reservation.close()
+                stopping.wait(pool.poll_seconds)
+        finally:
+            # In-flight tasks retain their GPU locks until their process trees stop.
+            executor.shutdown(wait=True)
+            with sessions.begin() as session:
+                worker = session.get(WorkerStatus, worker_id)
+                if worker:
+                    session.delete(worker)
 
 
 if __name__ == "__main__":

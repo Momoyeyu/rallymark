@@ -136,3 +136,51 @@ def test_gpu_ocr_failure_retries_cpu_without_losing_scoreboard(tmp_path, monkeyp
     assert providers == ["cuda", "cpu"]
     assert rows == expected and observations == []
     assert warnings == ["OCR accelerator unavailable; used CPU fallback"]
+
+
+def test_cuda_oom_is_retryable_and_does_not_publish_result(tmp_path):
+    import sys
+    import time
+
+    from rallymark_algorithm.runner import process
+
+    with pytest.raises(AnalysisFailure) as raised:
+        process(
+            [sys.executable, "-c", "print('CUDA out of memory'); raise SystemExit(1)"],
+            tmp_path / "tad.log",
+            time.monotonic() + 10,
+            lambda: None,
+        )
+    assert raised.value.code == "gpu_out_of_memory"
+    assert raised.value.retryable
+
+
+def test_explicit_gpu_allocation_is_passed_to_tad_and_ocr(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from rallymark_algorithm import runner
+
+    calls = []
+
+    def process(command, log, deadline, check, progress=None, env=None):
+        calls.append((command, env))
+        output = tmp_path / "tad"
+        output.mkdir()
+        (output / "predictions.json").write_text(json.dumps({"rallies": []}))
+
+    monkeypatch.setattr(runner, "process", process)
+    settings = SimpleNamespace(ftt_root=tmp_path, weights_root=tmp_path)
+    runner.run_tad(
+        tmp_path / "video",
+        tmp_path,
+        settings,
+        {},
+        1,
+        lambda: None,
+        lambda *a: None,
+        ["GPU-a", "GPU-b", "GPU-c"],
+    )
+    command, env = calls[0]
+    assert command[1].endswith("infer_multigpu.py")
+    assert command[command.index("--devices") + 1] == "GPU-a,GPU-b,GPU-c"
+    assert runner.ocr_environment({}, "GPU-c")["CUDA_VISIBLE_DEVICES"] == "GPU-c"

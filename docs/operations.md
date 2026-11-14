@@ -2,7 +2,7 @@
 
 ## Bootstrap
 
-Requirements are Docker with daemon access, Docker Compose 2.24.4 or newer, and an NVIDIA driver plus NVIDIA Container Toolkit on the GPU host. Python 3 runs the operator scripts. The source tree and .runtime/deploy.env must be available on the host.
+Requirements are Docker 28 or newer with daemon access and CDI support, Docker Compose 2.24.4 or newer, and an NVIDIA driver plus NVIDIA Container Toolkit with generated CDI devices on the GPU host. Python 3 runs the operator scripts. The source tree and .runtime/deploy.env must be available on the host.
 
 ~~~sh
 make setup
@@ -16,7 +16,7 @@ make deploy VERSION=<commit-sha>
 
 make setup generates unique credentials and leaves an existing file intact. Keep the environment file private. REGISTRY is currently the local image-name prefix rallymark. make deploy VERSION=<commit-sha> builds images on the deployment host before draining work; make rollback reuses the recorded previous images without rebuilding them. When a registry becomes available, configure REGISTRY and use LOCAL_BUILD=0 to pull published images. Use the API and algorithm database roles created by the PostgreSQL initialization script. Initialization runs once on a new database volume; changing a password in the environment file does not rotate an existing database role.
 
-Weights are mounted read-only through WEIGHTS_PATH, which must contain the files recorded in services/algorithm/vendor/ftt/SHA256_MANIFEST.json. Relative mount paths resolve from deploy/. Select one available NVIDIA GPU by index or UUID in GPU_DEVICE. MIN_GPU_MEMORY_GIB sets the minimum memory threshold (default 12 GiB). Deployment checks total capacity so existing jobs can drain; make doctor and new worker startup also check free memory. Admission does not depend on the model name. One worker uses one selected GPU; additional cards remain available for other work. A new GPU still requires a real sample smoke test. Only the frontend port is exposed. The first deployment is for the lab network/VPN and HTTP; set secure cookies and terminate HTTPS before using a public HTTPS endpoint.
+Weights are mounted read-only through WEIGHTS_PATH, which must contain the files recorded in services/algorithm/vendor/ftt/SHA256_MANIFEST.json. Relative mount paths resolve from deploy/. Set GPU_DEVICE to `all` (automatic) or a comma-separated allowlist of indices/UUIDs. Set GPU_CDI_DEVICE to `nvidia.com/gpu=all` or a CDI device name supplied by the target host. MIN_GPU_MEMORY_GIB sets the minimum memory threshold (default 12 GiB). Deployment checks total capacity so existing jobs can drain; make doctor and new worker startup also check free memory. Admission does not depend on the model name. The algorithm dispatcher adapts to the eligible pool and queue depth; busy cards are skipped, without preempting external work. Device numbers are not fixed in application code. A new GPU still requires a real sample smoke test. Only the frontend port is exposed. The first deployment is for the lab network/VPN and HTTP; set secure cookies and terminate HTTPS before using a public HTTPS endpoint.
 
 ## Choosing a deployment machine
 
@@ -107,3 +107,30 @@ distribution, which shares the same import path. The uv override excludes the CP
 distribution on Linux. CUDA OCR subprocesses find CUDA 11/cuDNN 8 libraries from
 the pinned PyTorch environment. Rebuild the worker image when updating this lock;
 validate actual CUDA provider execution and a real sample, not only the GPU name.
+
+## Adaptive algorithm resources
+
+`deploy/gpu-pool.yaml` is read only by the algorithm worker. Override its mount
+with `GPU_POOL_FILE` in the target environment, or use
+`make config-edit CONFIG_SCOPE=algorithm`, then `make config-check` and
+`make config-apply`. Zero caps mean automatic GPU count / concurrency; optional
+positive caps constrain a shared host. The business service has no GPU policy
+configuration. Admission checks free memory (14 GiB by default), utilization
+(<=20%) and existing compute process memory (<512 MiB). These margins are
+configurable except the conservative small-context exemption. Scheduling is
+cooperative: another user's process can still start after admission. OOM errors
+are logged internally, trigger the existing bounded retry, and never publish a
+partial shard result.
+
+Run `nvidia-ctk cdi list` on the host before deploying; regenerate CDI descriptions
+after changing drivers/devices. Production uses CDI rather than the legacy
+`--gpus` hook to retain device access through container/cgroup updates. The FTT
+multi-GPU report records a controlled before/after container-update reproduction.
+Fake development and GPU-disabled maintenance modes do not request CDI devices.
+The allowlist is runtime configuration, not a committed host UUID.
+
+`make backup` includes the algorithm resource YAML. Restore keeps compatibility
+with older backups that did not include this optional file. GPU reservation
+decisions and their job IDs appear in algorithm JSON logs; per-attempt
+`allocation.json` records the exact devices and resource policy. Public capacity
+returns only ready/busy/unavailable and queue length.

@@ -12,9 +12,11 @@ services:
   algorithm-worker:
     environment:
       ENVIRONMENT: development
+      GPU_POOL_PATH: ""
     image: ${REGISTRY}/algorithm-dev-worker:${VERSION}
     build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: dev-worker}
     volumes: !override
       - algorithm-work:/data/work
       - ./config.dev.yaml:/app/config.yaml:ro
     deploy: !reset {}
+    devices: !reset []

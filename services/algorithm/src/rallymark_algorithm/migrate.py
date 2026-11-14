@@ -27,6 +27,10 @@ def migrate(engine):
             Base.metadata.create_all(connection)
             connection.execute(text("INSERT INTO algorithm.schema_migrations(version) VALUES (1)"))
 
+        if 2 not in versions:
+            connection.execute(text("ALTER TABLE algorithm.workers ADD COLUMN IF NOT EXISTS capacity JSON"))
+            connection.execute(text("INSERT INTO algorithm.schema_migrations(version) VALUES (2)"))
+
 
 if __name__ == "__main__":
     engine, _ = database(Settings.load().database_url)

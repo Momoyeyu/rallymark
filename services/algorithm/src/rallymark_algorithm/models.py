@@ -41,4 +41,5 @@ class WorkerStatus(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     gpu_ready: Mapped[bool]
+    capacity: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     version: Mapped[str] = mapped_column(String(100))

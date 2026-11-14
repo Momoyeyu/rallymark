@@ -124,3 +124,23 @@ def test_task_snapshot_does_not_acquire_new_server_defaults(client):
     assert response.status_code == 200
     with client.app.state.sessions() as session:
         assert session.get(Job, data["id"]).config == data["config"]
+
+
+def test_external_gpu_saturation_queues_instead_of_becoming_unavailable(client):
+    from rallymark_algorithm.models import WorkerStatus, utcnow
+
+    headers = {"Authorization": "Bearer test-service-token"}
+    with client.app.state.sessions.begin() as session:
+        session.add(
+            WorkerStatus(
+                id="scheduler",
+                heartbeat_at=utcnow(),
+                gpu_ready=True,
+                version="test-algorithm",
+                capacity={"available": 0, "total": 4},
+            )
+        )
+    assert client.get("/internal/v1/capacity", headers=headers).json() == {"state": "busy", "queued": 0}
+    response = client.post("/internal/v1/jobs", json=payload(), headers=headers)
+    assert response.status_code == 200
+    assert response.json()["attempt"] == 0
