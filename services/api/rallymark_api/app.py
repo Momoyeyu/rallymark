@@ -20,6 +20,8 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .errors import ApiError
+from .admin import management_router
 from .availability import CapacityUnavailable, check_capacity
 from .config import Settings
 from .db import ACTIVE, Analysis, Maintenance, Video, connect, now
@@ -29,11 +31,6 @@ from .media import InvalidVideo, probe, public_metadata, MAX_PIXELS
 from .preparation import run_preparer
 
 COOKIE = "rallymark_session"
-
-
-class ApiError(Exception):
-    def __init__(self, status, code, message):
-        self.status, self.code, self.message = status, code, message
 
 
 class Rally(BaseModel):
@@ -205,6 +202,9 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
     app = FastAPI(title="RallyMark API", version="0.1.0", lifespan=lifespan)
     app.state.factory = factory
     app.state.settings = settings
+    app.include_router(
+        management_router(factory, settings, config, video_json, VideoResponse, logger)
+    )
 
     @app.middleware("http")
     async def request_context(request, call_next):
@@ -244,6 +244,8 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                     status_code=500,
                 )
         response.headers["X-Request-ID"] = request.state.request_id
+        if request.url.path.startswith("/api/v1/admin"):
+            response.headers["Cache-Control"] = "no-store"
         logger.info(
             "http_request",
             extra={
@@ -310,7 +312,10 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
 
     def owned(db, identifier, request, lock=False):
         query = select(Video).where(
-            Video.id == str(identifier), Video.owner == owner(request), Video.deleting.is_(False)
+            Video.id == str(identifier),
+            Video.owner == owner(request),
+            Video.deleting.is_(False),
+            Video.trashed_at.is_(None),
         )
         video = db.scalar(query.with_for_update() if lock else query)
         if video is None:
@@ -389,6 +394,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                         Video.owner == identity,
                         Video.upload_key == idempotency_key,
                         Video.deleting.is_(False),
+                        Video.trashed_at.is_(None),
                     )
                 )
                 if existing:
@@ -439,6 +445,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                             Video.owner == identity,
                             Video.upload_key == idempotency_key,
                             Video.deleting.is_(False),
+                            Video.trashed_at.is_(None),
                         )
                     )
                     if existing:
@@ -483,6 +490,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                             Video.owner == identity,
                             Video.upload_key == idempotency_key,
                             Video.deleting.is_(False),
+                            Video.trashed_at.is_(None),
                         )
                     )
                     if existing:
@@ -503,6 +511,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                 .where(
                     Video.owner == owner(request),
                     Video.deleting.is_(False),
+                    Video.trashed_at.is_(None),
                     Video.expires_at > now(),
                 )
                 .order_by(Video.created_at.desc())
@@ -674,7 +683,12 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
         internal(request)
         with factory() as db:
             video = db.get(Video, str(identifier))
-            if video is None or video.deleting or not media_path(video).is_file():
+            if (
+                video is None
+                or video.deleting
+                or video.trashed_at is not None
+                or not media_path(video).is_file()
+            ):
                 raise ApiError(404, "not_found", "视频文件不存在。")
             return FileResponse(media_path(video), media_type="video/mp4")
 

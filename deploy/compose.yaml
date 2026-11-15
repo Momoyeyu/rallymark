@@ -40,7 +40,7 @@ services:
       ALGORITHM_URL: http://algorithm:8001
       MEDIA_ROOT: /data/media
     volumes:
-      - media:/data/media
+      - ${MEDIA_STORAGE:-media}:/data/media
       - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
     depends_on: {postgres: {condition: service_healthy}}
     healthcheck:
@@ -54,7 +54,7 @@ services:
     build: {context: .., dockerfile: deploy/Dockerfile.algorithm, target: api}
     environment: *algorithm-env
     volumes:
-      - algorithm-work:/data/work
+      - ${ALGORITHM_STORAGE:-algorithm-work}:/data/work
       - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
     depends_on: {postgres: {condition: service_healthy}}
     healthcheck:
@@ -73,7 +73,7 @@ services:
       GPU_POOL_PATH: /app/gpu-pool.yaml
     shm_size: 2gb
     volumes:
-      - algorithm-work:/data/work
+      - ${ALGORITHM_STORAGE:-algorithm-work}:/data/work
       - ${WEIGHTS_PATH:?required}:/models:ro
       - ${GPU_POOL_FILE:-./gpu-pool.yaml}:/app/gpu-pool.yaml:ro
       - ${CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
@@ -91,6 +91,8 @@ services:
     image: ${REGISTRY:?required}/web:${VERSION:?required}
     build: {context: .., dockerfile: deploy/Dockerfile.web}
     ports: ['${BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-8080}:8080']
+    volumes:
+      - ${PREVIEW_DATA_PATH:-../.runtime/preview-data}:/data/demos:ro
     depends_on: {api: {condition: service_started}}
     healthcheck:
       test: [CMD-SHELL, wget -q -O /dev/null http://127.0.0.1:8080/health/live]

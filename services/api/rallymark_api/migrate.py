@@ -1,9 +1,11 @@
 """Ordered schema migrations; never run migrations implicitly during API startup."""
 
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, select
+from uuid import uuid4
+from .identity import password_hash
 
 from .config import Settings
-from .db import Base, Maintenance, connect
+from .db import Base, Maintenance, User, UserSession, LoginLimit, AuditEvent, connect
 
 
 def migrate(engine):
@@ -42,6 +44,41 @@ def migrate(engine):
                     )
                 )
             connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (2)"))
+        if 3 not in versions:
+            for model in (User, UserSession, LoginLimit, AuditEvent):
+                model.__table__.create(connection, checkfirst=True)
+            columns = {
+                column["name"]
+                for column in inspect(connection).get_columns(
+                    "videos", schema="business" if prefix else None
+                )
+            }
+            if "user_id" not in columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {prefix}videos ADD COLUMN user_id VARCHAR(36) REFERENCES {prefix}users(id)"
+                    )
+                )
+                connection.execute(
+                    text(f"CREATE INDEX ix_videos_user_id ON {prefix}videos(user_id)")
+                )
+            if "trashed_at" not in columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {prefix}videos ADD COLUMN trashed_at TIMESTAMP WITH TIME ZONE"
+                    )
+                )
+            if not connection.scalar(select(User.id).limit(1)):
+                connection.execute(
+                    User.__table__.insert().values(
+                        id=str(uuid4()),
+                        username="admin",
+                        password_hash=password_hash("admin"),
+                        role="admin",
+                        active=True,
+                    )
+                )
+            connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (3)"))
 
 
 def main():

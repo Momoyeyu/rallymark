@@ -15,6 +15,7 @@ import time
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 RUNTIME = ROOT / ".runtime"
 ENV = ROOT / (os.environ.get("ENV_FILE") or ".runtime/deploy.env")
 
@@ -71,6 +72,10 @@ def forward_remote(action):
         "GPU_POOL_FILE",
         "GPU_CDI_DEVICE",
         "CONFIG_SCOPE",
+        "MEDIA_STORAGE",
+        "ALGORITHM_STORAGE",
+        "STORAGE_MOUNT",
+        "STORAGE_ROOT",
         "PREVIEW_PORT",
         "PREVIEW_DATA_PATH",
     ):
@@ -220,6 +225,8 @@ def deploy(version, *, build=False, pull=False):
     previous_file = version_directory() / "current-version"
     previous = previous_file.read_text().strip() if previous_file.exists() else None
     os.environ["VERSION"] = version
+    from storage import validate_mount
+    validate_mount()
     compose("config", "--quiet")
     if os.environ.get("GPU_MODE", "enabled") != "disabled":
         gpu_preflight(require_free=False)
@@ -481,7 +488,12 @@ def main():
         business("status")
     elif action == "logs":
         compose("logs", "--follow", "--tail", "200", os.environ.get("SERVICE") or "api")
+    elif action == "storage-migrate":
+        from storage import migrate_storage
+        migrate_storage(sys.modules[__name__])
     elif action == "doctor":
+        from storage import validate_mount
+        validate_mount()
         run(["docker", "version"])
         run(["docker", "compose", "version"])
         compose("config", "--quiet")
@@ -494,6 +506,8 @@ def main():
     elif action == "config-check":
         config_check()
     elif action == "config-apply":
+        from storage import validate_mount
+        validate_mount()
         config_check()
         drain()
         compose(
