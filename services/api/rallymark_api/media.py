@@ -80,13 +80,28 @@ def inspect(path: Path, max_duration: int):
                 raise ValueError("Invalid frame rate")
         except (ValueError, ZeroDivisionError):
             rate = "30"
+        try:
+            average_rate = float(Fraction(video.get("avg_frame_rate", rate)))
+            if not math.isfinite(average_rate) or average_rate <= 0:
+                average_rate = float(Fraction(rate))
+        except (ValueError, ZeroDivisionError):
+            average_rate = float(Fraction(rate))
+        clock_drift = max(
+            (
+                abs((stamp - timestamps[0]) - index / average_rate)
+                for index, stamp in enumerate(timestamps)
+            ),
+            default=0,
+        )
+        # Ignore sub-100ms mux timing jitter; large VFR drift breaks frame-index TAD timestamps.
+        needs_cfr = clock_drift > 0.1
         hdr = video.get("color_transfer") in ("smpte2084", "arib-std-b67")
         transcode = (
             video["codec_name"] != "h264"
             or video.get("pix_fmt") != "yuv420p"
             or rotation % 360
             or hdr
-            or vfr
+            or needs_cfr
         )
         remux = info["format"].get("tags", {}).get("major_brand", "").strip() == "qt" or any(
             s["codec_name"] != "aac" for s in audio
@@ -97,6 +112,7 @@ def inspect(path: Path, max_duration: int):
             "height": width if rotation % 180 else height,
             "_prepare": "transcode" if transcode else "remux" if remux else "none",
             "_vfr": vfr,
+            "_clock_drift_s": clock_drift,
             "_fps": rate,
             "_audio": audio[0]["codec_name"] if audio else None,
             "_codec": video["codec_name"],

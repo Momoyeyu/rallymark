@@ -211,3 +211,33 @@ def test_variable_frame_rate_is_normalized_to_the_video_clock(tmp_path):
     )["packets"]
     times = sorted(float(p["pts_time"]) for p in packets)
     assert times[150] == pytest.approx(5.0, abs=0.001)
+
+
+def test_small_mux_timestamp_gap_does_not_force_h264_reencoding(tmp_path):
+    source = tmp_path / "minor-gap.mov"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=320x180:r=30:d=1",
+            "-vf",
+            "select=not(eq(n\\,15))",
+            "-fps_mode",
+            "vfr",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(source),
+        ],
+        check=True,
+        timeout=20,
+    )
+    info = probe(source, 900)
+    assert info["_vfr"]
+    assert info["_clock_drift_s"] < 0.1
+    assert info["_prepare"] == "remux"

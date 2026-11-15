@@ -16,9 +16,9 @@ ProRes, WebM, MKV, unusual audio and multiview are not advertised as supported.
 Compatible H.264 MP4 bytes are retained exactly. H.264 MOV is remuxed with copied
 video and AAC audio, without changing decoded pixels. PCM is converted to AAC.
 HEVC, rotated images or incompatible pixel formats are normalized to H.264
-8-bit 4:2:0 MP4, with faststart and original timing. Variable-frame-rate inputs are detected from
-demuxed presentation timestamps and resampled to CFR for the current frame-index
-TAD model; they require preparation even when already H.264. Encoding uses CPU libx264
+8-bit 4:2:0 MP4, with faststart and original timing. Presentation timestamps are checked against the current frame-index TAD clock.
+Drift above 100 ms requires CFR preparation even for H.264; isolated sub-100ms
+mux timing gaps do not force compatible H.264 into re-encoding. Encoding uses CPU libx264
 veryfast/CRF18, two decoder/encoder/filter threads; it does not resize to reduce
 upload cost or use algorithm GPUs. Rotation is baked into pixels; odd dimensions
 are padded rather than cropped. PQ/HLG is tone-mapped to BT.709 SDR for this common
