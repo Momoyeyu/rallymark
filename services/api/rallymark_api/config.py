@@ -29,6 +29,7 @@ class AlgorithmConfig(BaseModel):
     fragment_gap_s: float = Field(default=1, ge=0, le=5)
     score_confidence: float = Field(default=0.8, ge=0, le=1)
     edge_window_s: float = Field(default=60, ge=0, le=120)
+    ocr_lookback_seconds: float = Field(default=4.5, ge=0.5, le=10)
     ocr_crop: str = Field(default="auto", pattern=r"^(auto|\d+:\d+:\d+:\d+)$")
     ocr_width: int = Field(default=1920, gt=0)
     ocr_height: int = Field(default=1080, gt=0)

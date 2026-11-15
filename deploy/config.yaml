@@ -6,14 +6,15 @@ application:
   poll_seconds: 2
 algorithm:
   version: ftt-3e05fd4
-  tad_top_k: 200
+  tad_top_k: 195
   nearby_seconds: 9
   protect_top_m: 100
   min_duration_s: 0.5
   score_filter: true
   fragment_gap_s: 1
-  score_confidence: 0.8
+  score_confidence: 0.9
   edge_window_s: 60
+  ocr_lookback_seconds: 5.25
   ocr_crop: 'auto'
   ocr_width: 1920
   ocr_height: 1080

@@ -10,6 +10,11 @@ TAD is the primary detector. Scoreboard OCR assists boundaries where the support
 
 See [media ingestion](docs/media-ingestion.md) for supported formats, conversion and recovery.
 
+Production analyzes compatible original video bytes without experimental frame-rate,
+resolution or bitrate compression. The deployed original-input preset uses Top-195,
+a nine-second neighborhood, protected Top-100 and a 5.25-second OCR lookback.
+Necessary MOV/HEVC compatibility preparation follows the media-ingestion policy.
+
 ## Development
 
 ~~~sh

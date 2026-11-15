@@ -125,8 +125,11 @@ def load_ftt(settings, relative):
 
 def fuse_predictions(settings, config, tad, ocr, duration, observations=None):
     module = load_ftt(settings, "code/postprocess_rallies.py")
+    lookback = config.get("ocr_lookback_seconds")
+    if lookback is not None:
+        ocr = [row | {"start_s": round(max(0, row["end_s"] - lookback), 3)} for row in ocr]
     # Missing fields belong to legacy snapshots; never apply new defaults to them.
-    return module.postprocess(
+    result = module.postprocess(
         tad,
         ocr,
         top_k=config["tad_top_k"],
@@ -140,6 +143,9 @@ def fuse_predictions(settings, config, tad, ocr, duration, observations=None):
         video_duration_s=duration,
         score_observations=observations,
     )
+    if lookback is not None:
+        result["parameters"]["ocr_lookback_seconds"] = lookback
+    return result
 
 
 def ocr_environment(config, device=None):

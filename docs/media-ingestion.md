@@ -1,5 +1,10 @@
 # Media ingestion
 
+Production retains compatible original inputs. It does not apply the experimental
+30 fps, resolution-reduction or bitrate-compression presets. Compatibility
+preparation below is retained for formats that need it; it is not an upload-size
+or inference-speed optimization.
+
 The browser reads local container metadata before sending a video body. It fetches
 `GET /api/v1/upload-policy` for the active limits, then checks byte size, MP4/MOV
 content, H.264/HEVC codec, one video track, supported audio, duration and resolution.

@@ -108,6 +108,39 @@ distribution on Linux. CUDA OCR subprocesses find CUDA 11/cuDNN 8 libraries from
 the pinned PyTorch environment. Rebuild the worker image when updating this lock;
 validate actual CUDA provider execution and a real sample, not only the GPU name.
 
+## Original-input preset
+
+The selected production path analyzes compatible original media without lowering
+its frame rate, resolution or bitrate. The six-match FTT comparison is recorded
+in [report 009, section 7](http://gitlab.local/sujunjie/ftt-demo/-/blob/master/docs/009-frame-rate-ablation.md#7-与未压缩最佳配置的多维比较).
+The preset is Top-195, neighborhood nine seconds, protection Top-100, minimum
+orphan duration 0.5 seconds, fragment gap one second, score-confidence 0.9,
+edge evidence 60 seconds and `algorithm.ocr_lookback_seconds: 5.25`.
+It preserved all previously covered GT seconds on the six development matches;
+it is not a guarantee for new videos. Recall remains the primary evaluation goal.
+
+The lookback changes only the start of an existing OCR proposal, clamped at zero.
+The raw OCR observations and proposal file remain available, and the effective
+lookback is saved in each job snapshot and `postprocessed.json`. Existing task
+snapshots without the field retain their old behavior; the schema fallback is
+4.5 seconds. All new deployment snapshots use the explicit YAML value.
+
+Older images reject the new YAML key. On the first promotion, take `make backup`
+before updating the target checkout. Deploy the new image with the backed-up
+configuration first, so automatic image fallback can still read that configuration:
+
+~~~sh
+make deploy VERSION=<commit> CONFIG_FILE=../backups/<checkpoint>/config.yaml
+make config-check VERSION=<commit>
+make config-apply VERSION=<commit>
+~~~
+
+The last two commands use the new default YAML. They validate both services,
+drain active tasks and recreate the configured services. To roll back to a version
+that predates the field, pass its backed-up configuration explicitly:
+`make rollback VERSION=<old-version> CONFIG_FILE=../backups/<checkpoint>/config.yaml`.
+Keep the checkpoint and old images until the new release is accepted.
+
 ## Adaptive algorithm resources
 
 `deploy/gpu-pool.yaml` is read only by the algorithm worker. Override its mount

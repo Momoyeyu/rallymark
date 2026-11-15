@@ -49,6 +49,26 @@ def test_score_constraints_are_part_of_product_fusion():
     assert result["score_constraints"]["discarded"][0]["drop_reason"] == "closed_score_gap"
 
 
+def test_ocr_lookback_uses_snapshot_and_preserves_legacy_proposals():
+    from types import SimpleNamespace
+
+    from rallymark_algorithm.runner import fuse_predictions
+
+    settings = SimpleNamespace(ftt_root=FTT)
+    config = {"tad_top_k": 195, "nearby_seconds": 9}
+    ocr = [{"start_s": 1, "end_s": 5.5, "score": 0.9}]
+    legacy = fuse_predictions(settings, config, [], ocr, 10)
+    current = fuse_predictions(settings, config | {"ocr_lookback_seconds": 5.25}, [], ocr, 10)
+    assert legacy["rallies"][0]["start_s"] == 1
+    assert current["rallies"][0]["start_s"] == 0.25
+    assert current["rallies"][0]["end_s"] == 5.5
+    assert ocr == [{"start_s": 1, "end_s": 5.5, "score": 0.9}]
+    early = fuse_predictions(
+        settings, config | {"ocr_lookback_seconds": 5.25}, [], [{"start_s": 0, "end_s": 2, "score": 0.9}], 10
+    )
+    assert early["rallies"][0]["start_s"] == 0
+
+
 def test_vendored_score_problem_set():
     import subprocess
     import sys

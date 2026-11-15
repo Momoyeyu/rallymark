@@ -37,3 +37,6 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
   browser preflight aligned with the public upload policy; never trust filename
   extensions as codec/container validation. `preparing` must stay protected by
   drain/cleanup and excluded from algorithm submission until hashes are updated.
+- Production uses original-input analysis; keep compatible MP4 bytes, frame rate
+  and dimensions intact. See docs/media-ingestion.md for the required compatibility
+  preparation and docs/operations.md for the validated original-input preset.
