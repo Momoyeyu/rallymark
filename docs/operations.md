@@ -175,3 +175,6 @@ with video/request IDs in API logs. `application.conversion_timeout_seconds`
 (default 900) and `application.max_normalized_bytes` (default 1000000000) control
 conversion bounds through the usual config commands. Rollback should follow the
 normal drain procedure so old versions never receive pending preparation work.
+The shipped YAML uses code defaults for the new optional preparation settings,
+remaining readable by the preceding release. If adding custom preparation keys,
+restore the older version's configuration before rolling back to that version.
