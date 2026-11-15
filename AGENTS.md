@@ -32,3 +32,8 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
   metadata, metrics, screenshots and source provenance; prune superseded encoded
   videos and duplicate release copies after verification. This local policy does
   not authorize deleting remote deployment volumes or rollback images.
+
+- Media compatibility and CPU normalization belong to the business service. Keep
+  browser preflight aligned with the public upload policy; never trust filename
+  extensions as codec/container validation. `preparing` must stay protected by
+  drain/cleanup and excluded from algorithm submission until hashes are updated.

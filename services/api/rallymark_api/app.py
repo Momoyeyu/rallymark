@@ -25,7 +25,8 @@ from .config import Settings
 from .db import ACTIVE, Analysis, Maintenance, Video, connect, now
 from .dispatcher import run_dispatcher
 from .logging import configure
-from .media import InvalidVideo, probe
+from .media import InvalidVideo, probe, public_metadata, MAX_PIXELS
+from .preparation import run_preparer
 
 COOKIE = "rallymark_session"
 
@@ -77,6 +78,15 @@ class VideoResponse(BaseModel):
     created_at: str
     expires_at: str
     latest_analysis: AnalysisResponse | None
+
+
+class UploadPolicy(BaseModel):
+    max_upload_bytes: int
+    max_duration_seconds: int
+    max_pixels: int
+    formats: list[str]
+    video_codecs: list[str]
+    audio_codecs: list[str]
 
 
 class VideoList(BaseModel):
@@ -172,9 +182,18 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             if settings.dispatcher_enabled
             else None
         )
+        preparer = (
+            asyncio.create_task(run_preparer(factory, settings, config))
+            if settings.dispatcher_enabled
+            else None
+        )
         try:
             yield
         finally:
+            if preparer:
+                preparer.cancel()
+                with suppress(asyncio.CancelledError):
+                    await preparer
             if task:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -344,6 +363,18 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             path="/",
         )
 
+    @app.get("/api/v1/upload-policy", response_model=UploadPolicy)
+    def upload_policy(request: Request):
+        owner(request)
+        return {
+            "max_upload_bytes": config.application.max_upload_bytes,
+            "max_duration_seconds": config.application.max_duration_seconds,
+            "max_pixels": MAX_PIXELS,
+            "formats": ["mp4", "mov"],
+            "video_codecs": ["avc", "hevc"],
+            "audio_codecs": ["aac", "pcm-s16", "pcm-s24", "pcm-s32", "pcm-f32"],
+        }
+
     @app.post("/api/v1/videos", response_model=VideoResponse, status_code=201)
     async def upload(
         request: Request,
@@ -370,6 +401,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
         digest = hashlib.sha256()
         size = 0
         committed = False
+        source = settings.media_root / (identifier + ".source")
         try:
             with temp.open("xb") as target:
                 while chunk := await file.read(1024 * 1024):
@@ -378,16 +410,28 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                         raise ApiError(413, "upload_too_large", "视频大小超过上传限制。")
                     digest.update(chunk)
                     target.write(chunk)
-            if not size or Path(file.filename or "").suffix.lower() != ".mp4":
-                raise ApiError(422, "invalid_video", "请上传完整的 MP4 视频。")
+            if not size:
+                raise ApiError(422, "invalid_video", "视频文件为空，请重新选择。")
             try:
                 metadata = await asyncio.to_thread(
                     probe_video, temp, config.application.max_duration_seconds
                 )
             except InvalidVideo as error:
+                logger.info(
+                    "media_rejected",
+                    extra={
+                        "fields": {
+                            "request_id": request.state.request_id,
+                            "size_bytes": size,
+                            "reason": str(error),
+                        }
+                    },
+                )
                 raise ApiError(422, "invalid_video", str(error)) from error
+            preparation = metadata.get("_prepare", "none") != "none"
+            metadata = public_metadata(metadata)
             await asyncio.to_thread(capacity, request.state.request_id)
-            os.replace(temp, final)
+            os.replace(temp, source if preparation else final)
             with factory.begin() as db:
                 if idempotency_key:
                     existing = db.scalar(
@@ -413,7 +457,10 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                 )
                 db.add(video)
                 db.flush()
-                db.add(new_analysis(video, config))
+                analysis = new_analysis(video, config)
+                if preparation:
+                    analysis.status = "preparing"
+                db.add(analysis)
                 db.flush()
                 result = video_json(db, video)
             committed = True
@@ -446,6 +493,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             temp.unlink(missing_ok=True)
             if not committed:
                 final.unlink(missing_ok=True)
+                source.unlink(missing_ok=True)
 
     @app.get("/api/v1/videos", response_model=VideoList)
     def videos(request: Request):
@@ -497,6 +545,11 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             capacity(request.state.request_id)
             admit_analysis(db)
             item = new_analysis(video, config, idempotency_key)
+            if (
+                not media_path(video).exists()
+                or (existing and (existing.error or {}).get("code") == "media_preparation_failed")
+            ) and (settings.media_root / (video.id + ".source")).exists():
+                item.status = "preparing"
             db.add(item)
             db.flush()
             return analysis_json(item)

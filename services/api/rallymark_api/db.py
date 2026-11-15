@@ -12,7 +12,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-ACTIVE = ("queued", "downloading", "tad", "ocr", "postprocessing")
+ALGORITHM_ACTIVE = ("queued", "downloading", "tad", "ocr", "postprocessing")
+
+ACTIVE = ("preparing", *ALGORITHM_ACTIVE)
 
 
 def now():
@@ -55,6 +57,7 @@ class Analysis(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     submitted: Mapped[bool] = mapped_column(Boolean, default=False)
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lease_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_poll_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

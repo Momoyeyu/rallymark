@@ -34,6 +34,8 @@ def cleanup(factory, root, apply=False, video_id=None):
     if apply:
         for identifier in removed:
             (root / (identifier + ".mp4")).unlink(missing_ok=True)
+            (root / (identifier + ".source")).unlink(missing_ok=True)
+            (root / (identifier + ".prepare.mp4")).unlink(missing_ok=True)
             shutil.rmtree(root / "thumbnails" / identifier, ignore_errors=True)
             with factory.begin() as db:
                 db.execute(delete(Analysis).where(Analysis.video_id == identifier))

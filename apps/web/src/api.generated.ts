@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/upload-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Upload Policy */
+        get: operations["upload_policy_api_v1_upload_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos": {
         parameters: {
             query?: never;
@@ -331,6 +348,21 @@ export interface components {
              */
             score_status: "observed" | "inferred" | "unknown";
         };
+        /** UploadPolicy */
+        UploadPolicy: {
+            /** Max Upload Bytes */
+            max_upload_bytes: number;
+            /** Max Duration Seconds */
+            max_duration_seconds: number;
+            /** Max Pixels */
+            max_pixels: number;
+            /** Formats */
+            formats: string[];
+            /** Video Codecs */
+            video_codecs: string[];
+            /** Audio Codecs */
+            audio_codecs: string[];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -413,6 +445,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    upload_policy_api_v1_upload_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadPolicy"];
+                };
             };
         };
     };

@@ -1,6 +1,6 @@
 """Ordered schema migrations; never run migrations implicitly during API startup."""
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from .config import Settings
 from .db import Base, Maintenance, connect
@@ -31,6 +31,17 @@ def migrate(engine):
             Base.metadata.create_all(connection)
             connection.execute(Maintenance.__table__.insert().values(id=1, draining=False))
             connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (1)"))
+        if 2 not in versions:
+            columns = inspect(connection).get_columns(
+                "analyses", schema="business" if prefix else None
+            )
+            if not any(column["name"] == "ready_at" for column in columns):
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {prefix}analyses ADD COLUMN ready_at TIMESTAMP WITH TIME ZONE"
+                    )
+                )
+            connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (2)"))
 
 
 def main():

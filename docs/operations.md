@@ -164,3 +164,14 @@ The default preview export reads the single current `.runtime/preview-source`
 dataset. Its `review/` metadata is paired by SHA-256 with canonical `.runtime/inputs`
 originals; `videos` is a relative alias. Use `EXPERIMENT=...` explicitly to export
 a historical experiment, rather than silently replacing the latest preview.
+
+## Media preparation
+
+The business API accepts MP4/MOV H.264/HEVC and normalizes only when needed.
+See [media ingestion](media-ingestion.md) for the bounded CPU path. Preparation
+uses durable `preparing` analyses and is included in drain/cleanup protection;
+review `media_preparation_started/completed/failed` and `media_rejected` events
+with video/request IDs in API logs. `application.conversion_timeout_seconds`
+(default 900) and `application.max_normalized_bytes` (default 1000000000) control
+conversion bounds through the usual config commands. Rollback should follow the
+normal drain procedure so old versions never receive pending preparation work.

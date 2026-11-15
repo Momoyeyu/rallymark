@@ -32,6 +32,24 @@
         }
       }
     },
+    "/api/v1/upload-policy": {
+      "get": {
+        "summary": "Upload Policy",
+        "operationId": "upload_policy_api_v1_upload_policy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPolicy"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/videos": {
       "post": {
         "summary": "Upload",
@@ -828,6 +846,53 @@
           "end_s"
         ],
         "title": "Rally"
+      },
+      "UploadPolicy": {
+        "properties": {
+          "max_upload_bytes": {
+            "type": "integer",
+            "title": "Max Upload Bytes"
+          },
+          "max_duration_seconds": {
+            "type": "integer",
+            "title": "Max Duration Seconds"
+          },
+          "max_pixels": {
+            "type": "integer",
+            "title": "Max Pixels"
+          },
+          "formats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Formats"
+          },
+          "video_codecs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Video Codecs"
+          },
+          "audio_codecs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Audio Codecs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "max_upload_bytes",
+          "max_duration_seconds",
+          "max_pixels",
+          "formats",
+          "video_codecs",
+          "audio_codecs"
+        ],
+        "title": "UploadPolicy"
       },
       "ValidationError": {
         "properties": {

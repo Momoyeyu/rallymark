@@ -290,7 +290,7 @@ def run_analysis(job, settings, progress, check, devices=None):
                     if time.monotonic() > deadline:
                         raise AnalysisFailure("analysis_timeout", "Video download timed out")
                     size += len(block)
-                    if size > 500000000:
+                    if size > 1_000_000_000:
                         raise AnalysisFailure("invalid_media", "Video exceeds maximum size")
                     digest.update(block)
                     stream.write(block)

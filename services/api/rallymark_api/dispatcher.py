@@ -8,7 +8,7 @@ from uuid import uuid4
 import httpx
 from sqlalchemy import or_, select
 
-from .db import ACTIVE, Analysis, Video, now
+from .db import ALGORITHM_ACTIVE, Analysis, Video, now
 
 logger = logging.getLogger("rallymark")
 
@@ -39,7 +39,7 @@ async def dispatch_once(factory, settings, config, client):
     timestamp = now()
     with factory.begin() as db:
         query = select(Analysis).where(
-            Analysis.status.in_(ACTIVE),
+            Analysis.status.in_(ALGORITHM_ACTIVE),
             Analysis.next_poll_at <= timestamp,
             or_(Analysis.lease_until.is_(None), Analysis.lease_until < timestamp),
         )
@@ -61,8 +61,8 @@ async def dispatch_once(factory, settings, config, client):
             "algorithm_version": item.algorithm_version,
         }
         duration = video.duration_s
-        created_at = item.created_at.replace(tzinfo=UTC)
-        timeout = item.config.get("algorithm", {}).get("timeout_seconds", 2700)
+        created_at = (item.ready_at or item.created_at).replace(tzinfo=UTC)
+        timeout = item.config.get("timeout_seconds", 2700)
     headers = {"Authorization": "Bearer " + settings.internal_token.get_secret_value()}
     try:
         if (now() - created_at).total_seconds() > timeout:
@@ -77,7 +77,11 @@ async def dispatch_once(factory, settings, config, client):
             response = await client.post(url, json=payload, headers=headers)
         response.raise_for_status()
         status = response.json()
-        if status["id"] != job_id or status["status"] not in (*ACTIVE, "succeeded", "failed"):
+        if status["id"] != job_id or status["status"] not in (
+            *ALGORITHM_ACTIVE,
+            "succeeded",
+            "failed",
+        ):
             raise ValueError("Invalid algorithm status")
         result = status.get("result") or {}
         rallies = validate_result(result, duration) if status["status"] == "succeeded" else []

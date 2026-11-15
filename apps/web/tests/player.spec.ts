@@ -72,6 +72,17 @@ test('a mobile user navigates original video and disables auto-skip by dragging'
   };
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/upload-policy'))
+      return route.fulfill({
+        json: {
+          max_upload_bytes: 500000000,
+          max_duration_seconds: 900,
+          max_pixels: 8847360,
+          formats: ['mp4', 'mov'],
+          video_codecs: ['avc', 'hevc'],
+          audio_codecs: ['aac', 'pcm-s16', 'pcm-s24', 'pcm-s32', 'pcm-f32'],
+        },
+      });
     if (path.endsWith('/media')) return respondMedia(route);
     if (path.endsWith('/session')) await route.fulfill({ status: 204 });
     else if (path.endsWith('/poster') || path.includes('/thumbnail'))
@@ -428,6 +439,17 @@ test('product empty, running, failed and disconnected states share accessible co
       path.includes('/thumbnail')
     )
       return route.fulfill({ status: 204 });
+    if (path.endsWith('/upload-policy'))
+      return route.fulfill({
+        json: {
+          max_upload_bytes: 500000000,
+          max_duration_seconds: 900,
+          max_pixels: 8847360,
+          formats: ['mp4', 'mov'],
+          video_codecs: ['avc', 'hevc'],
+          audio_codecs: ['aac', 'pcm-s16', 'pcm-s24', 'pcm-s32', 'pcm-f32'],
+        },
+      });
     if (path.endsWith('/media')) return respondMedia(route);
     if (path.endsWith('/videos') && route.request().method() === 'POST') {
       await uploadGate;
@@ -557,6 +579,17 @@ test('unavailable analysis stops before video transfer and keeps a public reques
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/session') || path.endsWith('/events'))
       return route.fulfill({ status: 204 });
+    if (path.endsWith('/upload-policy'))
+      return route.fulfill({
+        json: {
+          max_upload_bytes: 500000000,
+          max_duration_seconds: 900,
+          max_pixels: 8847360,
+          formats: ['mp4', 'mov'],
+          video_codecs: ['avc', 'hevc'],
+          audio_codecs: ['aac'],
+        },
+      });
     if (path.endsWith('/availability'))
       return route.fulfill({
         status: 503,

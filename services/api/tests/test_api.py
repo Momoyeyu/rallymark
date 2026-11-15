@@ -77,7 +77,8 @@ def test_range_media_and_internal_auth(context):
 
 def test_invalid_file_and_request_origin(context):
     client, _, _, _ = context
-    assert upload(client, filename="match.mov").status_code == 422
+    # A compatible payload is accepted regardless of the filename supplied by Photos.
+    assert upload(client, filename="match.MOV").status_code == 201
     assert upload(client, body=b"").status_code == 422
     assert (
         client.post("/api/v1/session", headers={"Origin": "http://another-origin"}).status_code
@@ -249,7 +250,7 @@ def test_configured_upload_byte_limit(context, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "codec,audio,duration", [("hevc", None, 12), ("h264", "mp3", 12), ("h264", None, 901)]
+    "codec,audio,duration", [("vp9", None, 12), ("h264", "mp3", 12), ("h264", None, 901)]
 )
 def test_probe_rejects_unsupported_video(monkeypatch, tmp_path, codec, audio, duration):
     import json
@@ -390,3 +391,43 @@ def test_media_revalidation_remains_private_and_checks_expiry(context):
     with factory.begin() as db:
         db.get(Video, video["id"]).expires_at = now() - timedelta(seconds=1)
     assert client.get(url, headers=conditional).status_code == 404
+
+
+def test_media_preparation_wait_does_not_consume_algorithm_deadline(context):
+    import asyncio
+
+    client, _, factory, settings = context
+    video = upload(client).json()
+    identifier = video["latest_analysis"]["id"]
+    with factory.begin() as db:
+        item = db.get(Analysis, identifier)
+        item.created_at = now() - timedelta(hours=2)
+        item.ready_at = now()
+        item.config["timeout_seconds"] = 30
+
+    async def run():
+        def handle(request):
+            return httpx.Response(
+                200, json={"id": identifier, "status": "succeeded", "result": {"rallies": []}}
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as transport:
+            assert await dispatch_once(factory, settings, settings.load_config(), transport)
+
+    asyncio.run(run())
+    with factory() as db:
+        assert db.get(Analysis, identifier).status == "succeeded"
+
+
+def test_migration_adds_media_ready_time_to_existing_database(tmp_path):
+    from sqlalchemy import inspect, text
+
+    engine, _ = connect(f"sqlite:///{tmp_path}/old.db")
+    migrate(engine)
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE analyses DROP COLUMN ready_at"))
+        connection.execute(text("DELETE FROM schema_versions WHERE version=2"))
+    migrate(engine)
+    migrate(engine)
+    assert "ready_at" in {column["name"] for column in inspect(engine).get_columns("analyses")}
+    engine.dispose()

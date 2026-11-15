@@ -9,6 +9,7 @@ import {
   FilmStrip,
 } from '@phosphor-icons/react';
 import Player from './player/Player';
+import { preflight, type UploadPolicy } from './uploadPreflight';
 import { time } from './player/time';
 import { IconButton, ActionButton } from './ui/controls';
 import { Brand } from './ui/Brand';
@@ -18,6 +19,7 @@ import { Progress } from './ui/Progress';
 import { ApiError, request, upload, track, type Video } from './api';
 
 const stages: Record<string, string> = {
+  preparing: '准备视频',
   queued: '等待分析',
   downloading: '准备视频',
   tad: '识别回合',
@@ -32,6 +34,7 @@ export default function App() {
   );
   const [history, setHistory] = useState(false),
     [uploading, setUploading] = useState<number | null>(null);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<ApiError | null>(null),
     [retrying, setRetrying] = useState(false);
   const session = useQuery({
@@ -77,14 +80,14 @@ export default function App() {
   }
   async function onUpload(file?: File) {
     if (!file || uploading !== null) return;
-    if (file.size > 500_000_000) {
-      setError(new ApiError('视频需要小于 500 MB'));
-      return;
-    }
     setError(null);
     setUploading(0);
+    setChecking(true);
     try {
+      const policy = await request<UploadPolicy>('/upload-policy');
+      await preflight(file, policy);
       await request('/availability');
+      setChecking(false);
       const result = await upload(file, setUploading);
       client.setQueryData(['video', result.id], result);
       choose(result.id);
@@ -94,6 +97,7 @@ export default function App() {
       track({ name: 'upload_failed' });
     } finally {
       setUploading(null);
+      setChecking(false);
       if (input.current) input.current.value = '';
     }
   }
@@ -140,7 +144,7 @@ export default function App() {
         type="file"
         name="file"
         aria-label="上传原视频"
-        accept="video/mp4,.mp4"
+        accept="video/mp4,video/quicktime,.mp4,.mov,.m4v"
         hidden
         onChange={(e) => void onUpload(e.target.files?.[0])}
       />
@@ -166,9 +170,9 @@ export default function App() {
         {uploading !== null ? (
           <section className="status-page" aria-live="polite">
             <UploadSimple size={44} aria-hidden="true" />
-            <h1>{uploading < 100 ? '视频上传' : '视频校验'}</h1>
-            <p>{uploading < 100 ? uploading + '%' : '即将分析'}</p>
-            <Progress label="上传进度" value={uploading} max={100} />
+            <h1>{checking ? '检查视频' : uploading < 100 ? '视频上传' : '视频校验'}</h1>
+            <p>{checking ? '尚未上传' : uploading < 100 ? uploading + '%' : '即将分析'}</p>
+            <Progress label="上传进度" value={checking ? undefined : uploading} max={100} />
             <p className="muted">上传期间请保持此页面打开</p>
           </section>
         ) : video && analysis?.status === 'succeeded' ? (
@@ -244,7 +248,7 @@ export default function App() {
               disabled={!session.isSuccess}
               onClick={() => input.current?.click()}
             />
-            <small>MP4 · H.264 · 最大 500 MB / 15 分钟</small>
+            <small>MP4 / MOV · 最大 500 MB / 15 分钟</small>
             {!!videos.data?.items.length && (
               <ActionButton
                 icon={ClockCounterClockwise}

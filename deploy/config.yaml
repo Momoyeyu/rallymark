@@ -1,6 +1,8 @@
 application:
   max_upload_bytes: 500000000
   max_duration_seconds: 900
+  conversion_timeout_seconds: 900
+  max_normalized_bytes: 1000000000
   retention_days: 7
   session_cookie_secure: false
   poll_seconds: 2

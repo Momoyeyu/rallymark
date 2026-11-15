@@ -4,9 +4,11 @@ RallyMark identifies rallies in table-tennis match videos and lets viewers jump 
 
 ## First release
 
-Upload an MP4/H.264 video up to 500 MB and 15 minutes, wait for analysis, then review rally markers. Previous/next buttons seek and play in one action. Automatic skipping is enabled by default, pauses after the final rally, and turns off when the viewer manually scrubs. The same browser retains anonymous history for seven days.
+Upload an MP4/MOV video using H.264 or HEVC, up to 500 MB and 15 minutes. Local format and size checks run before transfer; necessary media preparation runs in the business service before analysis. Then review rally markers. Previous/next buttons seek and play in one action. Automatic skipping is enabled by default, pauses after the final rally, and turns off when the viewer manually scrubs. The same browser retains anonymous history for seven days.
 
 TAD is the primary detector. Scoreboard OCR assists boundaries where the supported broadcast layout is recognized; other layouts receive a TAD-only result with a warning. Algorithm parameters live in deployment YAML, not user-facing controls. Experimental tuning continues in the independent FTT demo repository.
+
+See [media ingestion](docs/media-ingestion.md) for supported formats, conversion and recovery.
 
 ## Development
 

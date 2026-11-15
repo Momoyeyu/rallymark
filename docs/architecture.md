@@ -2,7 +2,7 @@
 
 The React client uses one origin for static assets, the public API and owned video playback. Nginx forwards /api requests to the business service. PostgreSQL persists business and algorithm state in separate schemas with separate credentials. The algorithm service is accessible only on the container network.
 
-The business API stores original videos in its media volume. After ffprobe validation, it records an analysis with immutable algorithm configuration and a content checksum. Its coordinator submits the same analysis ID to the algorithm API until acknowledged and polls durable progress. Repeated requests remain idempotent.
+The business API validates real uploaded media, independently of filename hints. Compatible MP4 is retained; MOV/HEVC that requires normalization enters durable CPU preparation before analysis. Source files and prepared playback media share retention and ownership. See [media ingestion](media-ingestion.md) for preflight, conversion and recovery. It records an analysis with immutable algorithm configuration and a content checksum. Its coordinator submits the same analysis ID to the algorithm API until acknowledged and polls durable progress. Repeated requests remain idempotent.
 
 The algorithm API records jobs. An algorithm dispatcher claims jobs only after reserving available GPU capacity, each with a renewable lease, downloads the source through the authenticated internal media endpoint, and validates its checksum. Real execution uses the pinned FTT source snapshot, TAD, optional supported-layout OCR and postprocessing. An attempt directory is published only after validation. Worker restarts recover expired leases. Source videos are accessed through HTTP, so services can be deployed on different hosts.
 
