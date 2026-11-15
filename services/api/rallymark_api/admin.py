@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
@@ -47,6 +47,21 @@ class UserView(BaseModel):
     created_at: str
 
 
+class StorageView(BaseModel):
+    disk_total_bytes: int
+    disk_free_bytes: int
+    disk_used_bytes: int
+    video_count: int
+    video_bytes: int
+    trashed_count: int
+    expired_count: int
+    retention_days: int
+
+
+class CleanupView(BaseModel):
+    removed: int
+
+
 def user_view(user):
     return {key: getattr(user, key) for key in ("id", "username", "role", "active")} | {
         "created_at": user.created_at.isoformat()
@@ -57,6 +72,15 @@ def management_router(factory, settings, config, video_json, video_model, logger
     router = APIRouter(prefix=COOKIE_PATH, tags=["management"])
     logger = logger or logging.getLogger("rallymark")
     dummy_hash = password_hash(secrets.token_urlsafe(32))
+    managed_video = create_model(
+        "ManagedVideo",
+        __base__=video_model,
+        user_id=(str | None, None),
+        trashed_at=(str | None, None),
+    )
+    video_list = create_model(
+        "ManagedVideoList", items=(list[managed_video], ...), total=(int, ...), page=(int, ...)
+    )
 
     def current(request: Request):
         with factory() as db:
@@ -103,7 +127,7 @@ def management_router(factory, settings, config, video_json, video_model, logger
             limit = db.scalar(select(LoginLimit).where(LoginLimit.key == key).with_for_update())
             if limit and limit.until.replace(tzinfo=UTC) > now() and limit.failures >= 5:
                 raise ApiError(429, "login_limited", "尝试过多，请稍后再试。")
-            user = db.scalar(select(User).where(User.username == username))
+            user = db.scalar(select(User).where(User.username == username).with_for_update())
             valid = verify_password(body.password, user.password_hash if user else dummy_hash)
             if not valid or user is None or not user.active:
                 if limit is None:
@@ -196,7 +220,7 @@ def management_router(factory, settings, config, video_json, video_model, logger
                 .order_by(User.id)
                 .with_for_update()
             ).all()
-            u = db.get(User, str(identifier))
+            u = db.scalar(select(User).where(User.id == str(identifier)).with_for_update())
             if not u:
                 raise ApiError(404, "not_found", "用户不存在。")
             if (
@@ -216,7 +240,7 @@ def management_router(factory, settings, config, video_json, video_model, logger
             audit(db, actor, "user_updated", request, u.id)
             return user_view(u)
 
-    @router.get("/storage")
+    @router.get("/storage", response_model=StorageView)
     def storage(actor=Depends(administrator)):
         usage = shutil.disk_usage(settings.media_root)
         with factory() as db:
@@ -240,7 +264,7 @@ def management_router(factory, settings, config, video_json, video_model, logger
             retention_days=config.application.retention_days,
         )
 
-    @router.get("/videos")
+    @router.get("/videos", response_model=video_list)
     def videos(q: str = "", trashed: bool = False, page: int = 1, actor=Depends(administrator)):
         if not 1 <= page <= 100000 or len(q) > 100:
             raise ApiError(422, "invalid_request", "查询参数无效。")
@@ -314,7 +338,7 @@ def management_router(factory, settings, config, video_json, video_model, logger
             v.trashed_at = now() if action == "trash" else None
             audit(db, actor, "video_" + action, request, v.id)
 
-    @router.post("/cleanup")
+    @router.post("/cleanup", response_model=CleanupView)
     def clean(request: Request, actor=Depends(administrator)):
         result = cleanup(factory, settings.media_root, apply=True)
         with factory.begin() as db:

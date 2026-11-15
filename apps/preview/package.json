@@ -1,9 +1,0 @@
-{
-  "name": "@rallymark/preview",
-  "private": true,
-  "scripts": {
-    "build": "pnpm --dir ../web build:preview",
-    "dev": "pnpm --dir ../web exec vite --config vite.preview.config.ts --host 0.0.0.0"
-  },
-  "packageManager": "pnpm@10.20.0"
-}

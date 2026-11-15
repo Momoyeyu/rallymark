@@ -64,3 +64,22 @@ overlap context and original timestamps. Raw predictions are collected in global
 order, then NMS is applied exactly once. No video is cut or re-encoded. OCR shares
 the first reserved device and runs concurrently. Allocation/policy are recorded
 in the attempt's `allocation.json`, separate from immutable inference snapshots.
+
+## Product and management identity
+
+One frontend serves `/`, `/app`, `/preview` and `/admin`. Preview assets are a
+read-only web mount and remain independent of algorithm health. No management link
+is exposed in the public product navigation. The previous separate preview image
+and Compose project have been retired.
+
+Public uploads continue using the existing anonymous owner hash. `videos.user_id`
+is a nullable foreign key reserved for future authenticated ownership; existing
+records are not reassigned. Shared users have roles and active state; management
+uses an independent HttpOnly cookie and revocable database sessions. Admin login
+never grants ownership through public media APIs. Details and management behavior
+are maintained in [administration](administration.md).
+
+Media and algorithm-work mounts are configurable separately from PostgreSQL and
+weights. A data-mount guard protects host-local deployments; a later storage
+backend can replace the media adapter without coupling GPU workers to the business
+filesystem. See [operations](operations.md#video-storage-on-a-data-disk).

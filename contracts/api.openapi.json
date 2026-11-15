@@ -210,7 +210,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StorageView"
+                }
               }
             }
           }
@@ -261,7 +263,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedVideoList"
+                }
               }
             }
           },
@@ -423,7 +427,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupView"
+                }
               }
             }
           }
@@ -1107,6 +1113,19 @@
         ],
         "title": "Body_upload_api_v1_videos_post"
       },
+      "CleanupView": {
+        "properties": {
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "removed"
+        ],
+        "title": "CleanupView"
+      },
       "ErrorInfo": {
         "properties": {
           "code": {
@@ -1232,6 +1251,113 @@
         ],
         "title": "Login"
       },
+      "ManagedVideo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "duration_s": {
+            "type": "number",
+            "title": "Duration S"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "latest_analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "trashed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trashed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "duration_s",
+          "width",
+          "height",
+          "size_bytes",
+          "created_at",
+          "expires_at",
+          "latest_analysis"
+        ],
+        "title": "ManagedVideo"
+      },
+      "ManagedVideoList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedVideo"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page"
+        ],
+        "title": "ManagedVideoList"
+      },
       "Progress": {
         "properties": {
           "completed": {
@@ -1293,6 +1419,54 @@
           "end_s"
         ],
         "title": "Rally"
+      },
+      "StorageView": {
+        "properties": {
+          "disk_total_bytes": {
+            "type": "integer",
+            "title": "Disk Total Bytes"
+          },
+          "disk_free_bytes": {
+            "type": "integer",
+            "title": "Disk Free Bytes"
+          },
+          "disk_used_bytes": {
+            "type": "integer",
+            "title": "Disk Used Bytes"
+          },
+          "video_count": {
+            "type": "integer",
+            "title": "Video Count"
+          },
+          "video_bytes": {
+            "type": "integer",
+            "title": "Video Bytes"
+          },
+          "trashed_count": {
+            "type": "integer",
+            "title": "Trashed Count"
+          },
+          "expired_count": {
+            "type": "integer",
+            "title": "Expired Count"
+          },
+          "retention_days": {
+            "type": "integer",
+            "title": "Retention Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disk_total_bytes",
+          "disk_free_bytes",
+          "disk_used_bytes",
+          "video_count",
+          "video_bytes",
+          "trashed_count",
+          "expired_count",
+          "retention_days"
+        ],
+        "title": "StorageView"
       },
       "UploadPolicy": {
         "properties": {

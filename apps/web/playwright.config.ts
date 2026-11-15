@@ -10,10 +10,5 @@ export default defineConfig({
       url: 'http://127.0.0.1:4187',
       reuseExistingServer: false,
     },
-    {
-      command: 'pnpm exec vite --config vite.preview.config.ts --port 4188 --strictPort',
-      url: 'http://127.0.0.1:4188',
-      reuseExistingServer: false,
-    },
   ],
 });

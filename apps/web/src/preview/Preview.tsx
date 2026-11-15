@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FilmStrip, ArrowClockwise } from '@phosphor-icons/react';
 import Player from '../player/Player';
 import { Brand } from '../ui/Brand';
@@ -6,31 +6,14 @@ import { Select } from '../ui/Select';
 import { Notice } from '../ui/Notice';
 import { ActionButton } from '../ui/controls';
 import { time } from '../player/time';
-import type { Video } from '../api';
+import { useDemos } from './useDemos';
 
-type Demo = { video: Video; media: string; poster?: string };
 export default function Preview() {
-  const [items, setItems] = useState<Demo[]>([]);
   const [selected, setSelected] = useState(
     () => new URLSearchParams(location.search).get('clip') || 'nina',
   );
-  const [error, setError] = useState(false);
   const [revision, reload] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    setError(false);
-    void fetch('/demos/manifest.json', { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('manifest');
-        const manifest = (await response.json()) as { items: Demo[] };
-        if (!manifest.items?.length) throw new Error('empty');
-        setItems(manifest.items);
-      })
-      .catch((e) => {
-        if (e.name !== 'AbortError') setError(true);
-      });
-    return () => controller.abort();
-  }, [revision]);
+  const { items, error } = useDemos(revision);
   const entry = items.find((item) => item.video.id === selected) || items[0];
   function choose(id: string) {
     setSelected(id);

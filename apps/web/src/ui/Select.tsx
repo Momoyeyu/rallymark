@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { CaretDown, Check, FilmStrip } from '@phosphor-icons/react';
+import { CaretDown, Check, FilmStrip, type Icon } from '@phosphor-icons/react';
 import {
   autoUpdate,
   flip,
@@ -23,8 +23,10 @@ export function Select({
   value,
   options,
   onChange,
+  icon: Glyph = FilmStrip,
 }: {
   label: string;
+  icon?: Icon;
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
@@ -92,12 +94,12 @@ export function Select({
         aria-label={label}
         disabled={!options.length}
       >
-        <FilmStrip className="select-icon" aria-hidden="true" />
+        <Glyph className="select-icon" aria-hidden="true" />
         <span className="select-value">{options[selectedIndex]?.label ?? '选择视频'}</span>
         <CaretDown className={`select-caret ${open ? 'is-open' : ''}`} aria-hidden="true" />
       </button>
       {open && (
-        <FloatingPortal>
+        <FloatingPortal root={refs.domReference.current?.closest('dialog') || undefined}>
           <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
             <div
               ref={refs.setFloating}

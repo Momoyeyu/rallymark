@@ -480,6 +480,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** CleanupView */
+        CleanupView: {
+            /** Removed */
+            removed: number;
+        };
         /** ErrorInfo */
         ErrorInfo: {
             /** Code */
@@ -519,6 +524,39 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** ManagedVideo */
+        ManagedVideo: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Duration S */
+            duration_s: number;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Created At */
+            created_at: string;
+            /** Expires At */
+            expires_at: string;
+            latest_analysis: components["schemas"]["AnalysisResponse"] | null;
+            /** User Id */
+            user_id?: string | null;
+            /** Trashed At */
+            trashed_at?: string | null;
+        };
+        /** ManagedVideoList */
+        ManagedVideoList: {
+            /** Items */
+            items: components["schemas"]["ManagedVideo"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+        };
         /** Progress */
         Progress: {
             /** Completed */
@@ -542,6 +580,25 @@ export interface components {
              * @enum {string}
              */
             score_status: "observed" | "inferred" | "unknown";
+        };
+        /** StorageView */
+        StorageView: {
+            /** Disk Total Bytes */
+            disk_total_bytes: number;
+            /** Disk Free Bytes */
+            disk_free_bytes: number;
+            /** Disk Used Bytes */
+            disk_used_bytes: number;
+            /** Video Count */
+            video_count: number;
+            /** Video Bytes */
+            video_bytes: number;
+            /** Trashed Count */
+            trashed_count: number;
+            /** Expired Count */
+            expired_count: number;
+            /** Retention Days */
+            retention_days: number;
         };
         /** UploadPolicy */
         UploadPolicy: {
@@ -814,7 +871,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StorageView"];
                 };
             };
         };
@@ -838,7 +895,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ManagedVideoList"];
                 };
             };
             /** @description Validation Error */
@@ -959,7 +1016,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CleanupView"];
                 };
             };
         };

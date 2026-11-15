@@ -76,7 +76,6 @@ def forward_remote(action):
         "ALGORITHM_STORAGE",
         "STORAGE_MOUNT",
         "STORAGE_ROOT",
-        "PREVIEW_PORT",
         "PREVIEW_DATA_PATH",
     ):
         if os.environ.get(key):
@@ -415,7 +414,7 @@ def main():
     action = sys.argv[1] if len(sys.argv) > 1 else "help"
     if action == "help":
         print(
-            "setup dev check test build deploy rollback status logs doctor config-edit config-check config-apply data-clean smoke smoke-gpu backup restore sync preview-export preview-deploy preview-status preview-logs"
+            "setup dev check test build deploy rollback status logs doctor config-edit config-check config-apply data-clean smoke smoke-gpu backup restore sync storage-migrate preview-export preview-build"
         )
         print(
             "deploy/rollback VERSION=tag; logs SERVICE=api; data-clean [VIDEO_ID=id] [APPLY=1]; restore BACKUP=directory"
@@ -438,33 +437,7 @@ def main():
         if current.exists()
         else os.environ.get("VERSION") or "local"
     )
-    if action in ("preview-deploy", "preview-status", "preview-logs"):
-        command = [
-            "docker",
-            "compose",
-            "--project-name",
-            "rallymark-preview",
-            "--env-file",
-            ENV,
-            "-f",
-            ROOT / "deploy/compose.preview.yaml",
-        ]
-        if action == "preview-deploy":
-            data = Path(os.environ.get("PREVIEW_DATA_PATH", "../.runtime/preview-data"))
-            if not data.is_absolute():
-                data = ROOT / "deploy" / data
-            manifest = json.loads((data / "manifest.json").read_text())
-            if len(manifest["items"]) != 6:
-                raise RuntimeError("Export all six demos before deploying preview")
-            run([*command, "build"])
-            run([*command, "up", "-d", "--wait", "--wait-timeout", "120"])
-        else:
-            run(
-                [*command, "ps"]
-                if action == "preview-status"
-                else [*command, "logs", "--tail", "100", "--follow"]
-            )
-    elif action == "dev":
+    if action == "dev":
         os.environ["RALLYMARK_MODE"] = "dev"
         os.environ["VERSION"] = "local"
         deploy("local", build=True)

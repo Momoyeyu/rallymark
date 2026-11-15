@@ -6,6 +6,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly requestId?: string,
+    readonly status?: number,
   ) {
     super(message);
   }
@@ -14,7 +15,11 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch('/api/v1' + path, { credentials: 'same-origin', ...init });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new ApiError(body.error?.message || '请求失败，请稍后重试', body.error?.request_id);
+    throw new ApiError(
+      body.error?.message || '请求失败，请稍后重试',
+      body.error?.request_id,
+      response.status,
+    );
   }
   return response.status === 204 ? (undefined as T) : response.json();
 }

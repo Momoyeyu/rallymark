@@ -380,6 +380,15 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             "audio_codecs": ["aac", "pcm-s16", "pcm-s24", "pcm-s32", "pcm-f32"],
         }
 
+    def repeated_upload(db, video):
+        if (
+            video.deleting
+            or video.trashed_at is not None
+            or video.expires_at.replace(tzinfo=UTC) <= now()
+        ):
+            raise ApiError(409, "upload_unavailable", "本次上传记录不可用，请重新选择视频。")
+        return video_json(db, video)
+
     @app.post("/api/v1/videos", response_model=VideoResponse, status_code=201)
     async def upload(
         request: Request,
@@ -393,13 +402,11 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                     select(Video).where(
                         Video.owner == identity,
                         Video.upload_key == idempotency_key,
-                        Video.deleting.is_(False),
-                        Video.trashed_at.is_(None),
                     )
                 )
                 if existing:
                     await file.close()
-                    return video_json(db, existing)
+                    return repeated_upload(db, existing)
         await asyncio.to_thread(capacity, request.state.request_id)
         identifier = str(uuid4())
         temp = temporary / (identifier + ".upload")
@@ -444,12 +451,10 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                         select(Video).where(
                             Video.owner == identity,
                             Video.upload_key == idempotency_key,
-                            Video.deleting.is_(False),
-                            Video.trashed_at.is_(None),
                         )
                     )
                     if existing:
-                        return video_json(db, existing)
+                        return repeated_upload(db, existing)
                 admit_analysis(db)
                 video = Video(
                     id=identifier,
@@ -489,12 +494,10 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                         select(Video).where(
                             Video.owner == identity,
                             Video.upload_key == idempotency_key,
-                            Video.deleting.is_(False),
-                            Video.trashed_at.is_(None),
                         )
                     )
                     if existing:
-                        return video_json(db, existing)
+                        return repeated_upload(db, existing)
             raise
         finally:
             await file.close()

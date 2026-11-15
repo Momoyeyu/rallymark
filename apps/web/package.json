@@ -9,8 +9,7 @@
     "check": "prettier --check src tests dev scripts vite.config.ts vitest.config.ts playwright.config.ts && tsc --noEmit",
     "test": "vitest run",
     "build": "tsc --noEmit && vite build && node scripts/check-production.mjs",
-    "test:e2e": "playwright test",
-    "build:preview": "tsc --noEmit && vite build --config vite.preview.config.ts"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.20",

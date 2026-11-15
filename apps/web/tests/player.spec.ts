@@ -484,7 +484,7 @@ test('product empty, running, failed and disconnected states share accessible co
           : item,
     });
   });
-  await page.goto('/');
+  await page.goto('/app');
   await expect(page.getByRole('button', { name: '选择视频', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: '历史视频', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '历史视频' })).toContainText('还没有视频');
@@ -604,7 +604,7 @@ test('unavailable analysis stops before video transfer and keeps a public reques
     if (route.request().method() === 'POST') uploads++;
     return route.fulfill({ json: { items: [] } });
   });
-  await page.goto('/');
+  await page.goto('/app');
   await expect(page.getByRole('button', { name: '选择视频', exact: true })).toBeEnabled();
   await page
     .locator('input[type=file]')
@@ -656,7 +656,7 @@ test('static preview offers six matches with the shared mobile player and no upl
       },
     }),
   );
-  await page.goto('http://127.0.0.1:4188/');
+  await page.goto('/preview');
   await expect(page.getByRole('button', { name: '播放', exact: true })).toBeVisible();
   expect(await page.locator('input[type=file]').count()).toBe(0);
   expect(await page.getByRole('button', { name: /上传|选择文件|本地文件/ }).count()).toBe(0);

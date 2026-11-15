@@ -18,10 +18,18 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
 - Follow docs/design/interface.md for the UI language. Visible selectors, file pickers, progress and tooltips use the shared custom components; preserve semantic keyboard controls underneath. Verify expanded controls and viewport edges, not only collapsed screenshots.
 - Create reversible Git checkpoints for stable UI milestones and push both remotes. ui-baseline-20261113 records the pre-workspace version.
 
-- `apps/preview` is the read-only six-match static release. Its entry imports
-  `apps/web/src/preview`, reusing the exact player, UI primitives and theme.
-  The web package owns the shared build toolchain; build both entries in checks.
-  Never enable the development importer in either production entry.
+- `apps/web/src/site`, `/preview` and `/admin` share one production web image.
+  The six-match preview reuses the player and has no upload/import/API dependency.
+  Keep management entry points out of public navigation. See docs/administration.md.
+- Admin authentication never substitutes for the anonymous demo owner cookie.
+  Video.user_id remains nullable until product account integration is explicitly
+  enabled. Preserve existing owner hashes and do not bulk-assign old videos.
+- Passwords use salted hashes, sessions use hashed opaque tokens, and account
+  changes revoke sessions. Keep the last active administrator and reversible
+  video trash protections. Never return password/session hashes to the browser.
+- Selects inside a native dialog must portal into that dialog, not the inert body.
+- Configure video bind paths through the target environment. STORAGE_MOUNT must
+  be mounted before deploy/config-apply; do not silently create data on the SSD.
 - GPU maintenance uses `GPU_MODE=disabled`, not a fake runner. API database
   readiness and authenticated worker capacity are distinct. Public errors must
   be sanitized and correlated with backend logs; busy workers accept queues.

@@ -1,6 +1,6 @@
 # RallyMark
 
-RallyMark identifies rallies in table-tennis match videos and lets viewers jump between them while playing the original video. The interface prioritizes mobile screens and requires no login.
+RallyMark identifies rallies in table-tennis match videos and lets viewers jump between them while playing the original video. The public interface prioritizes mobile screens and requires no login.
 
 ## First release
 
@@ -47,6 +47,15 @@ The [six-match parameter experiment](docs/20261113-001/report.md) records recall
 
 See [architecture](docs/architecture.md) for service and persistence boundaries. [AGENTS.md](AGENTS.md) summarizes repository conventions. GitLab is the primary internal repository; GitHub is a private auxiliary remote. The default branch is master.
 
-只读六场预览：`make preview-export`、`make preview-build`、
-`make preview-deploy VERSION=<commit>`。正式站与预览站共用播放器和 UI，预览站
-没有上传入口，也不依赖算法服务。[部署与 GPU 维护模式](docs/operations.md#gpu-maintenance-and-static-preview)。
+## Product routes
+
+- `/` — product homepage
+- `/app` — anonymous upload, analysis and history
+- `/preview` — six read-only matches, independent of algorithm availability
+- `/admin` — authenticated video, storage and user management; no public navigation entry
+
+All routes use the same web service and port. Export preview pairs with
+`make preview-export`, then deploy the application normally. The initial management
+account is `admin` / `admin`; user changes and session revocation are available in
+the panel. See [administration](docs/administration.md) and
+[storage operations](docs/operations.md#video-storage-on-a-data-disk).

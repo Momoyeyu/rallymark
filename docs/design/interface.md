@@ -37,3 +37,16 @@ Header, workspace toolbar and player share one page gutter and maximum width. De
 Validate 320/390/768/1024/1440/1920px, long names, missing scores, many rounds, last pages, keyboard-only selection, touch-sized actions, modal boundaries, reduced motion, production bundle isolation and existing playback transitions. Capture both closed and expanded controls. UI review follows the current [Web Interface Guidelines](https://github.com/vercel-labs/web-interface-guidelines).
 
 The pre-redesign checkpoint is `ui-baseline-20261113` (`a24c9ea`), pushed to GitLab and GitHub. Commit each passing milestone and synchronize both remotes; preserve history so changes can be reverted independently.
+
+## Product entry and management
+
+The selected homepage centers a concise headline and upload/preview actions over
+a working shared-player showcase. Stack the same content on mobile. The public
+header never includes management. `/app` retains upload/history, `/preview` stays
+read-only, and old root `?video=` links remain compatible.
+
+Management reuses the same fields, buttons, selector, dialog and player. Desktop
+uses a quiet side navigation; mobile uses four touch-sized tabs. Video names
+truncate, numeric facts stay tabular, and action labels remain concise. Modal
+errors appear inside the dialog. Portal dropdowns target the nearest native
+dialog so its top-layer isolation does not block pointer/keyboard interaction.

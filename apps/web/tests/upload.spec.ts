@@ -74,7 +74,7 @@ test('invalid content, oversized and overlong videos never send a video upload',
     if (path.endsWith('/videos') && route.request().method() === 'POST') uploads++;
     return route.fulfill({ json: { items: [] } });
   });
-  await page.goto('/');
+  await page.goto('/app');
   await expect(page.getByRole('button', { name: '选择视频', exact: true })).toBeEnabled();
   await page
     .locator('input[type=file]')
@@ -131,7 +131,7 @@ for (const kind of ['mov', 'hevc', 'no-extension', 'fragmented']) {
       }
       return route.fulfill({ json: path.endsWith('/videos') ? { items: [] } : result });
     });
-    await page.goto('/');
+    await page.goto('/app');
     await expect(page.getByRole('button', { name: '选择视频', exact: true })).toBeEnabled();
     await page.locator('input[type=file]').setInputFiles({
       name: kind === 'no-extension' ? '15_raw' : '15_raw.MOV',

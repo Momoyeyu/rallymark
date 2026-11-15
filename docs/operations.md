@@ -85,18 +85,13 @@ repair, set `GPU_MODE=enabled`, run `make doctor`, redeploy, then `make smoke-gp
 API readiness checks database connectivity; authenticated algorithm capacity
 checks fresh, matching-version worker heartbeats separately.
 
-The read-only demo lives in `apps/preview`, sharing the web toolchain and the
-player, controls and styles in `apps/web`. It contains no importer or upload
-flow. Build with `make preview-build`. Export the six verified video/metadata
-pairs with `make preview-export EXPERIMENT=.runtime/experiments/<experiment>`.
-The export includes only public metadata and videos, never GT or raw diagnostics.
-Copy `.runtime/preview-data/` to the selected server at the same relative path.
-Deploy with `make preview-deploy VERSION=<commit>`; use `make preview-status` or
-`make preview-logs` to inspect it. `PREVIEW_PORT` defaults to 8081, separate from
-`WEB_PORT` 8080; `PREVIEW_DATA_PATH` is relative to `deploy/` unless absolute.
-Preview Compose uses its own project, image and read-only data mount. Exported
-video names contain content hashes; metadata is published atomically. Keep old
-video files until existing browser sessions have expired.
+The six-match read-only demo is the `/preview` route in `apps/web`, sharing the
+production image, port, player and UI. It has no importer, upload or API dependency.
+Export with `make preview-export` (optionally `EXPERIMENT=...`), copy the verified
+`.runtime/preview-data` directory to the target, set `PREVIEW_DATA_PATH`, then run
+normal `make deploy VERSION=<commit>`. The web container mounts it read-only and
+serves `/demos/`; no second preview port/container is needed. Public navigation is
+homepage → upload or preview; management has its own direct `/admin` route.
 
 ## Performance configuration
 
@@ -216,3 +211,46 @@ normal drain procedure so old versions never receive pending preparation work.
 The shipped YAML uses code defaults for the new optional preparation settings,
 remaining readable by the preceding release. If adding custom preparation keys,
 restore the older version's configuration before rolling back to that version.
+
+## Video storage on a data disk
+
+Database and model weights can remain on SSD while video-heavy data uses a data
+filesystem. Configure these in the selected target's private deployment environment:
+
+| Setting | Purpose | Default |
+|---|---|---|
+| `MEDIA_STORAGE` | Business videos, sources, thumbnails | `media` named volume |
+| `ALGORITHM_STORAGE` | Downloaded input and attempt diagnostics | `algorithm-work` named volume |
+| `PREVIEW_DATA_PATH` | Six-match public export, read-only on web | `../.runtime/preview-data` |
+| `STORAGE_MOUNT` | Required data filesystem mount, checked before deployment | unset |
+
+Bind paths are site configuration, never application constants. When
+`STORAGE_MOUNT` is set, all three paths must be existing directories beneath that
+mounted filesystem; missing mounts fail deployment/configuration application
+instead of silently filling the system disk. The host must mount it at boot
+before Docker starts the application. Do not use `docker compose down -v`.
+
+For an existing running deployment, choose a **new, nonexistent** target directory
+below a mounted filesystem and run on the selected host:
+
+```sh
+make storage-migrate STORAGE_MOUNT=<mounted-filesystem> STORAGE_ROOT=<new-directory>
+```
+
+This takes a private database/configuration backup, drains work, stops all business
+and algorithm writers, copies media/work/preview, compares every file's size and
+SHA-256, and changes only the three storage mounts. It retains original volumes,
+restarts services and writes `.runtime/storage-migration.json`. Copy that receipt
+and the checkpoint back to the maintenance machine. No database or weights move.
+A failed copy restores the previous deployment; partial target copies are retained
+for inspection, so retry with a new directory after resolving the failure.
+
+After migration verify old media Range playback and a fresh GPU upload. A rollback
+of image version continues to use current data paths. To roll back the storage
+itself before any new uploads, drain/stop writers and restore the checkpoint's
+storage settings. If new files have been written, reconcile those files and the
+database first; old volumes are a checkpoint, not a continuously updated replica.
+
+Management storage statistics describe the media filesystem. The logical playback
+file total excludes retained source files, thumbnails, algorithm scratch and
+preview assets. See [administration](administration.md) for permissions and trash.

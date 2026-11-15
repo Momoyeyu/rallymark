@@ -102,3 +102,21 @@ def test_login_throttles_and_migration_does_not_reset_password(context):
     assert login(c).status_code == 429
     migrate(f.kw["bind"])
     assert login(c).status_code == 429
+
+
+def test_retry_of_trashed_upload_key_returns_conflict_without_leaking_video(context):
+    c, _, factory, _ = context
+    c.post("/api/v1/session")
+    args = {
+        "files": {"file": ("match.mp4", b"video")},
+        "headers": {"Idempotency-Key": "stable-upload-key"},
+    }
+    video = c.post("/api/v1/videos", **args).json()
+    with factory.begin() as db:
+        db.get(Analysis, video["latest_analysis"]["id"]).status = "succeeded"
+    login(c)
+    assert c.post("/api/v1/admin/videos/" + video["id"] + "/trash").status_code == 204
+    response = c.post("/api/v1/videos", **args)
+    assert response.status_code == 409
+    assert video["id"] not in response.text
+    assert c.get("/api/v1/admin/videos?trashed=true").json()["total"] == 1

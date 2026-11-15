@@ -193,3 +193,84 @@ def test_postgres_private_media_thumbnail_and_cleanup(tmp_path):
                 db.execute(delete(Analysis).where(Analysis.video_id == identifier))
                 db.execute(delete(Video).where(Video.id == identifier))
         engine.dispose()
+
+
+def test_password_reset_serializes_with_inflight_login(tmp_path, monkeypatch):
+    import threading
+    from fastapi.testclient import TestClient
+    from rallymark_api import admin
+    from rallymark_api.app import create_app
+    from rallymark_api.db import User, UserSession
+    from rallymark_api.identity import password_hash
+
+    settings = Settings(
+        database_url=os.environ["TEST_DATABASE_URL"],
+        internal_token="auth-concurrency-test-token",
+        media_root=tmp_path,
+        dispatcher_enabled=False,
+    )
+    engine, factory = connect(settings.database_url)
+    migrate(engine)
+    username = "race-" + uuid4().hex
+    identifier = str(uuid4())
+    with factory.begin() as db:
+        db.add(
+            User(
+                id=identifier,
+                username=username,
+                password_hash=password_hash("oldpassword"),
+                role="admin",
+                active=True,
+            )
+        )
+    app = create_app(settings, engine)
+    verified, release, reset_done = threading.Event(), threading.Event(), threading.Event()
+    original = admin.verify_password
+
+    def gated(password, stored):
+        valid = original(password, stored)
+        if password == "oldpassword":
+            verified.set()
+            assert release.wait(5)
+        return valid
+
+    monkeypatch.setattr(admin, "verify_password", gated)
+    with TestClient(app) as actor, TestClient(app) as pending:
+        assert (
+            actor.post(
+                "/api/v1/admin/login", json={"username": "admin", "password": "admin"}
+            ).status_code
+            == 200
+        )
+        responses = {}
+
+        def login():
+            responses["login"] = pending.post(
+                "/api/v1/admin/login", json={"username": username, "password": "oldpassword"}
+            )
+
+        def reset():
+            responses["reset"] = actor.patch(
+                "/api/v1/admin/users/" + identifier, json={"password": "newpassword"}
+            )
+            reset_done.set()
+
+        login_thread, reset_thread = threading.Thread(target=login), threading.Thread(target=reset)
+        login_thread.start()
+        try:
+            assert verified.wait(5)
+            reset_thread.start()
+            assert not reset_done.wait(0.3), (
+                "Password reset must wait for the credential transaction"
+            )
+        finally:
+            release.set()
+            login_thread.join(5)
+            if reset_thread.ident:
+                reset_thread.join(5)
+        assert responses["login"].status_code == 200
+        assert responses["reset"].status_code == 200
+        assert pending.get("/api/v1/admin/me").status_code == 401
+    with factory.begin() as db:
+        db.execute(delete(UserSession).where(UserSession.user_id == identifier))
+        db.execute(delete(User).where(User.id == identifier))
