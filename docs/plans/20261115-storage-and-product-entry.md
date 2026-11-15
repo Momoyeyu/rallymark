@@ -18,19 +18,21 @@ Storage: configurable MEDIA_STORAGE and ALGORITHM_STORAGE select a named volume
 Drain, back up database/config, stop writers, copy all files and verify SHA-256 before
 changing mounts. Keep old volumes for rollback. Database/weights stay on SSD.
 
-- [ ] Storage: add configurable mounts and doctor checks; regression tests; migrate
+- [x] Storage: add configurable mounts and doctor checks; regression tests; migrate
       target media/work/preview to the data filesystem with verified manifests.
-- [ ] Identity and management: migration, admin auth/user/video/storage endpoints;
+- [x] Identity and management: migration, admin auth/user/video/storage endpoints;
       test anonymous isolation, privilege/CSRF/session expiry, last-admin guard,
       trash/restore/active protection and migration idempotency.
-- [ ] UI: selected homepage, route split, integrated preview, reusable form controls,
+- [x] UI: selected homepage, route split, integrated preview, reusable form controls,
       manager login/storage/videos/users/recycle views, mobile layout.
-- [ ] Verification: make check/test, browser flows and mobile viewport review;
+- [x] Verification: make check/test, browser flows and mobile viewport review;
       production deploy, old-media playback, real GPU upload, manager auth checks.
-- [ ] Document routes/permissions/migration/recovery, commit stable milestones and
+- [x] Document routes/permissions/migration/recovery, commit stable milestones and
       push GitLab and GitHub. Retire port 8081 after same-origin preview verification.
 
 Acceptance focus: existing anonymous cookies keep history; admin cookie never grants
 public ownership; no credentials or host storage paths in public errors; no fallback
 to an unmounted data directory; password resets revoke sessions; preview never gains
 upload/import controls. Deployment actions already authorized by the user.
+
+Acceptance evidence: [deployment validation](../validation/20261116-data-disk-and-product-entry.md).
