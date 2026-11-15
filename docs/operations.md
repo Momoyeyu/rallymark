@@ -49,7 +49,12 @@ The development override selects the fake runner, uses a separate Compose projec
 
 make deploy VERSION=... builds versioned local images, validates Compose, rejects new analysis submissions and drains all existing queued and active work, runs versioned migrations and updates containers. If health checks fail, the previous recorded application version is restored. Schema migrations must remain backward-compatible because rollback does not run database downgrade operations. make rollback VERSION=... can explicitly select a previous version.
 
-make config-check validates YAML before deployment. make config-apply drains active work and recreates the API and algorithm services. New jobs receive the new configuration; existing jobs retain their snapshots. View service status with make status and correlated logs with make logs SERVICE=api or SERVICE=algorithm-worker.
+make config-check validates YAML before deployment. make config-apply drains active
+work and recreates the API, algorithm services and web proxy. Recreating the proxy
+refreshes its Docker DNS upstream after the API address changes. New jobs receive
+the new configuration; existing jobs retain their snapshots. View service status
+with make status and correlated logs with make logs SERVICE=api or
+SERVICE=algorithm-worker.
 
 A changed model snapshot requires a real GPU smoke run before promotion. CI verifies CPU behavior, but a GPU inference test is a deployment check. Model weights are not part of container image layers or Git history.
 

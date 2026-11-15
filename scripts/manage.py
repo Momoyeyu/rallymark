@@ -504,6 +504,7 @@ def main():
             "api",
             "algorithm",
             "algorithm-worker",
+            "web",
         )
         business("undrain")
     elif action == "data-clean":

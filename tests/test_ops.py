@@ -60,6 +60,21 @@ class OpsReview(unittest.TestCase):
                 ops.main()
             drain.assert_not_called()
 
+    def test_config_apply_refreshes_proxy_after_recreating_api(self):
+        with (
+            patch.dict(os.environ, {"VERSION": "v2"}, clear=True),
+            patch.object(ops, "load_env"),
+            patch.object(ops, "config_check"),
+            patch.object(ops, "compose") as compose,
+            patch.object(ops, "drain"),
+            patch.object(ops, "business"),
+            patch("sys.argv", ["manage.py", "config-apply"]),
+        ):
+            ops.main()
+            compose.assert_any_call(
+                "up", "-d", "--force-recreate", "--wait", "api", "algorithm", "algorithm-worker", "web"
+            )
+
     def test_make_exported_empty_local_build_still_builds(self):
         with (
             patch.dict(os.environ, {"VERSION": "v2", "LOCAL_BUILD": ""}, clear=True),
