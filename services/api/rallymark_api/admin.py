@@ -1,5 +1,7 @@
 """Authenticated storage operations; public demo ownership stays anonymous."""
 
+import hashlib
+import hmac
 import logging
 import secrets
 import shutil
@@ -47,6 +49,11 @@ class UserView(BaseModel):
     created_at: str
 
 
+class VideoBatch(BaseModel):
+    ids: list[UUID] = Field(min_length=1, max_length=100)
+    action: Literal["trash", "restore"]
+
+
 class StorageView(BaseModel):
     disk_total_bytes: int
     disk_free_bytes: int
@@ -76,6 +83,7 @@ def management_router(factory, settings, config, video_json, video_model, logger
         "ManagedVideo",
         __base__=video_model,
         user_id=(str | None, None),
+        owner_label=(str, ...),
         trashed_at=(str | None, None),
     )
     video_list = create_model(
@@ -276,14 +284,38 @@ def management_router(factory, settings, config, video_json, video_model, logger
             if q:
                 query = query.where(Video.title.icontains(q, autoescape=True))
             total = db.scalar(select(func.count()).select_from(query.subquery()))
-            rows = db.scalars(
-                query.order_by(Video.created_at.desc()).offset((page - 1) * 20).limit(20)
+            page = min(page, max(1, (total + 19) // 20))
+            rows = list(
+                db.scalars(
+                    query.order_by(Video.created_at.desc(), Video.id)
+                    .offset((page - 1) * 20)
+                    .limit(20)
+                )
             )
+            users = dict(
+                db.execute(
+                    select(User.id, User.username).where(
+                        User.id.in_([v.user_id for v in rows if v.user_id])
+                    )
+                ).all()
+            )
+
+            def owner_label(v):
+                if v.user_id:
+                    return users.get(v.user_id, "账户 " + v.user_id[:8])
+                reference = hmac.new(
+                    settings.internal_token.get_secret_value().encode(),
+                    v.owner.encode(),
+                    hashlib.sha256,
+                ).hexdigest()[:10]
+                return "访客 " + reference
+
             return {
                 "items": [
                     video_json(db, v)
                     | {
                         "user_id": v.user_id,
+                        "owner_label": owner_label(v),
                         "trashed_at": v.trashed_at.isoformat() if v.trashed_at else None,
                     }
                     for v in rows
@@ -318,6 +350,37 @@ def management_router(factory, settings, config, video_json, video_model, logger
             path, media_type="video/mp4", headers={"Cache-Control": "private, no-store"}
         )
 
+    def change_videos(identifiers, action, request, actor):
+        ids = sorted({str(identifier) for identifier in identifiers})
+        with factory.begin() as db:
+            videos = list(
+                db.scalars(
+                    select(Video)
+                    .where(Video.id.in_(ids), Video.deleting.is_(False))
+                    .order_by(Video.id)
+                    .with_for_update()
+                )
+            )
+            if len(videos) != len(ids):
+                raise ApiError(404, "not_found", "部分视频已不存在，请刷新列表。")
+            if db.scalar(
+                select(Analysis.id)
+                .where(Analysis.video_id.in_(ids), Analysis.status.in_(ACTIVE))
+                .limit(1)
+            ):
+                raise ApiError(409, "video_active", "所选视频中有正在处理的任务，请刷新后重试。")
+            if action == "restore" and any(
+                v.expires_at.replace(tzinfo=UTC) <= now() for v in videos
+            ):
+                raise ApiError(409, "video_expired", "所选视频中有已过期的视频，无法恢复。")
+            for v in videos:
+                v.trashed_at = now() if action == "trash" else None
+                audit(db, actor, "video_" + action, request, v.id)
+
+    @router.post("/videos/batch", status_code=204)
+    def batch(body: VideoBatch, request: Request, actor=Depends(administrator)):
+        change_videos(body.ids, body.action, request, actor)
+
     @router.post("/videos/{identifier}/{action}", status_code=204)
     def change_video(
         identifier: UUID,
@@ -325,18 +388,7 @@ def management_router(factory, settings, config, video_json, video_model, logger
         request: Request,
         actor=Depends(administrator),
     ):
-        with factory.begin() as db:
-            v = managed(db, identifier)
-            if db.scalar(
-                select(Analysis.id)
-                .where(Analysis.video_id == v.id, Analysis.status.in_(ACTIVE))
-                .limit(1)
-            ):
-                raise ApiError(409, "video_active", "视频正在处理中，请稍后操作。")
-            if action == "restore" and v.expires_at.replace(tzinfo=UTC) <= now():
-                raise ApiError(409, "video_expired", "视频已过期，无法恢复。")
-            v.trashed_at = now() if action == "trash" else None
-            audit(db, actor, "video_" + action, request, v.id)
+        change_videos([identifier], action, request, actor)
 
     @router.post("/cleanup", response_model=CleanupView)
     def clean(request: Request, actor=Depends(administrator)):

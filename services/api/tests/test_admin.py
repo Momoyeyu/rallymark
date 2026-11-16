@@ -120,3 +120,51 @@ def test_retry_of_trashed_upload_key_returns_conflict_without_leaking_video(cont
     assert response.status_code == 409
     assert video["id"] not in response.text
     assert c.get("/api/v1/admin/videos?trashed=true").json()["total"] == 1
+
+
+def test_batch_is_atomic_and_pages_clamp_with_owner_labels(context):
+    from datetime import timedelta
+    from uuid import uuid4
+    from sqlalchemy import select
+    from rallymark_api.db import User, now
+
+    c, _, factory, _ = context
+    login(c)
+    ids = [str(uuid4()) for _ in range(21)]
+    with factory.begin() as db:
+        admin = db.scalar(select(User).where(User.username == "admin"))
+        for i, identifier in enumerate(ids):
+            db.add(
+                Video(
+                    id=identifier,
+                    owner="visitor-one" if i < 20 else "visitor-two",
+                    user_id=admin.id if i == 0 else None,
+                    title=f"clip-{i}",
+                    duration_s=10,
+                    width=1920,
+                    height=1080,
+                    size_bytes=10,
+                    sha256="0" * 64,
+                    created_at=now() + timedelta(seconds=i),
+                    expires_at=now() + timedelta(days=1),
+                )
+            )
+    rows = c.get("/api/v1/admin/videos").json()["items"]
+    assert rows[0]["owner_label"].startswith("访客 ")
+    assert rows[1]["owner_label"] != rows[0]["owner_label"]
+    last = c.get("/api/v1/admin/videos?page=2").json()
+    assert last["items"][0]["owner_label"] == "admin"
+    batch = "/api/v1/admin/videos/batch"
+    assert c.post(batch, json={"ids": [ids[0], str(uuid4())], "action": "trash"}).status_code == 404
+    assert c.get("/api/v1/admin/videos?trashed=true").json()["total"] == 0
+    assert c.post(batch, json={"ids": [ids[0]], "action": "trash"}).status_code == 204
+    page = c.get("/api/v1/admin/videos?page=2").json()
+    assert page["page"] == 1 and len(page["items"]) == 20
+    assert c.post(batch, json={"ids": [ids[0]], "action": "restore"}).status_code == 204
+    with factory.begin() as db:
+        from rallymark_api.app import new_analysis
+
+        db.add(new_analysis(db.get(Video, ids[0]), c.app.state.settings.load_config()))
+    assert c.post(batch, json={"ids": ids[:2], "action": "trash"}).status_code == 409
+    assert c.get("/api/v1/admin/videos?trashed=true").json()["total"] == 0
+    assert c.post(batch, json={"ids": [], "action": "trash"}).status_code == 422

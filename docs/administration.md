@@ -28,7 +28,14 @@ Storage shows the media filesystem capacity, video count, playback-file bytes,
 trash count and configured retention. It does not claim that playback-file bytes
 include sources, thumbnail files, algorithm inputs or previews.
 
-Video search is paginated. Administrators can view prepared video and its rally
+Video search is paginated. Each row displays its account username or a stable,
+non-credential guest reference derived from the anonymous owner. The guest reference
+identifies a browser session, not a person; clearing cookies creates a new owner.
+Page selection includes only terminal/actionable rows on that page. Changing pages
+or search clears selection. Bulk trash/restore is atomic: missing, active or expired
+(for restore) rows reject the whole request without partial updates. After counts
+shrink, the server and client return to the last valid page (page one if empty).
+ Administrators can view prepared video and its rally
 markers. Moving a terminal video to trash hides it from the original uploader,
 without immediately deleting files; restore works before its existing expiry.
 Active/queued/preparing work cannot be trashed. Retention continues from the

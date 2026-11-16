@@ -158,6 +158,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/videos/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch */
+        post: operations["batch_api_v1_admin_videos_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/videos/{identifier}/{action}": {
         parameters: {
             query?: never;
@@ -545,6 +562,8 @@ export interface components {
             latest_analysis: components["schemas"]["AnalysisResponse"] | null;
             /** User Id */
             user_id?: string | null;
+            /** Owner Label */
+            owner_label: string;
             /** Trashed At */
             trashed_at?: string | null;
         };
@@ -662,6 +681,16 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VideoBatch */
+        VideoBatch: {
+            /** Ids */
+            ids: string[];
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "trash" | "restore";
         };
         /** VideoList */
         VideoList: {
@@ -959,6 +988,37 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_api_v1_admin_videos_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VideoBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -366,6 +366,40 @@
         }
       }
     },
+    "/api/v1/admin/videos/batch": {
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Batch",
+        "operationId": "batch_api_v1_admin_videos_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/videos/{identifier}/{action}": {
       "post": {
         "tags": [
@@ -1306,6 +1340,10 @@
             ],
             "title": "User Id"
           },
+          "owner_label": {
+            "type": "string",
+            "title": "Owner Label"
+          },
           "trashed_at": {
             "anyOf": [
               {
@@ -1328,7 +1366,8 @@
           "size_bytes",
           "created_at",
           "expires_at",
-          "latest_analysis"
+          "latest_analysis",
+          "owner_label"
         ],
         "title": "ManagedVideo"
       },
@@ -1662,6 +1701,34 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VideoBatch": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ids"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "trash",
+              "restore"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ids",
+          "action"
+        ],
+        "title": "VideoBatch"
       },
       "VideoList": {
         "properties": {

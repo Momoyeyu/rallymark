@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Trash, ArrowCounterClockwise, CaretLeft, CaretRight } from '@phosphor-icons/react';
-import { adminRequest, bytes, type ManagedVideoList } from './api';
+import { adminRequest, bytes, jsonRequest, type ManagedVideoList } from './api';
 import type { Video } from '../api';
 import Player from '../player/Player';
 import { ErrorNotice } from '../ui/ErrorNotice';
+import { SelectionBox } from '../ui/SelectionBox';
 import { Field } from '../ui/Fields';
 import { Dialog } from '../ui/Dialog';
 import { ActionButton, IconButton } from '../ui/controls';
 import { time } from '../player/time';
+function actionable(v: Video) {
+  return !v.latest_analysis || ['succeeded', 'failed'].includes(v.latest_analysis.status);
+}
 const statusNames: Record<string, string> = {
   succeeded: '完成',
   failed: '失败',
@@ -27,12 +31,13 @@ export default function Videos({
   onError: (e: unknown) => void;
 }) {
   const client = useQueryClient();
+  const [selection, setSelection] = useState<string[]>([]);
   const [dialogError, setDialogError] = useState<unknown>(null);
   const [input, setInput] = useState(''),
     [search, setSearch] = useState(''),
     [page, setPage] = useState(1);
   const [preview, setPreview] = useState<Video | null>(null),
-    [confirm, setConfirm] = useState<Video | null>(null),
+    [confirm, setConfirm] = useState<Video[] | null>(null),
     [busy, setBusy] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -49,11 +54,29 @@ export default function Videos({
       ),
     refetchInterval: 15000,
   });
-  async function change(v: Video, action: 'trash' | 'restore') {
+  useEffect(() => {
+    setSelection([]);
+  }, [page, search]);
+  useEffect(() => {
+    if (!list.data) return;
+    if (list.data.page !== page) setPage(list.data.page);
+    setSelection((previous) =>
+      previous.filter((id) => list.data.items.some((v) => v.id === id && actionable(v))),
+    );
+  }, [list.data, page]);
+  const eligible = list.data?.items.filter(actionable) || [];
+  const chosen = eligible.filter((v) => selection.includes(v.id));
+  const displayPage = list.data?.page ?? page;
+  const pages = Math.max(1, Math.ceil((list.data?.total || 0) / 20));
+  async function change(videos: Video[], action: 'trash' | 'restore') {
     setBusy(true);
     setDialogError(null);
     try {
-      await adminRequest(`/videos/${v.id}/${action}`, { method: 'POST' });
+      await adminRequest(
+        '/videos/batch',
+        jsonRequest('POST', { ids: videos.map((v) => v.id), action }),
+      );
+      setSelection([]);
       setConfirm(null);
       await client.invalidateQueries({ queryKey: ['admin'] });
     } catch (e) {
@@ -82,6 +105,31 @@ export default function Videos({
           maxLength={100}
         />
       </div>
+      <div className="bulk-toolbar">
+        <div className="bulk-selection">
+          <SelectionBox
+            label="选择本页"
+            checked={
+              chosen.length === 0 ? false : chosen.length === eligible.length ? true : 'mixed'
+            }
+            disabled={busy || !eligible.length || list.isFetching || input !== search}
+            onClick={() =>
+              setSelection(chosen.length === eligible.length ? [] : eligible.map((v) => v.id))
+            }
+          />
+          <span>{chosen.length ? `已选 ${chosen.length} 项` : '选择本页'}</span>
+        </div>
+        <ActionButton
+          icon={trashed ? ArrowCounterClockwise : Trash}
+          label={trashed ? '批量恢复' : '批量回收'}
+          disabled={busy || !chosen.length || list.isFetching || input !== search}
+          onClick={() => {
+            setDialogError(null);
+            if (trashed) void change(chosen, 'restore');
+            else setConfirm(chosen);
+          }}
+        />
+      </div>
       {list.isPending ? (
         <p role="status">读取视频</p>
       ) : list.isError ? (
@@ -97,9 +145,20 @@ export default function Videos({
             const status = v.latest_analysis?.status || '';
             const active = !!status && !['succeeded', 'failed'].includes(status);
             return (
-              <div className="admin-row video-row" key={v.id}>
+              <div className="admin-row video-row selectable-row" key={v.id}>
+                <SelectionBox
+                  label={`选择${v.title}`}
+                  checked={chosen.some((item) => item.id === v.id)}
+                  disabled={busy || active || list.isFetching || input !== search}
+                  onClick={() =>
+                    setSelection((ids) =>
+                      ids.includes(v.id) ? ids.filter((id) => id !== v.id) : [...ids, v.id],
+                    )
+                  }
+                />
                 <div className="admin-row-title">
                   <strong title={v.title}>{v.title}</strong>
+                  <span className="video-owner">{v.owner_label}</span>
                   <span>
                     {time(v.duration_s)} / {bytes(v.size_bytes)} /{' '}
                     {new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit' }).format(
@@ -121,7 +180,7 @@ export default function Videos({
                     <IconButton
                       icon={ArrowCounterClockwise}
                       label={`恢复${v.title}`}
-                      onClick={() => void change(v, 'restore')}
+                      onClick={() => void change([v], 'restore')}
                       disabled={busy || active}
                     />
                   ) : (
@@ -130,9 +189,9 @@ export default function Videos({
                       label={`移入回收站${v.title}`}
                       onClick={() => {
                         setDialogError(null);
-                        setConfirm(v);
+                        setConfirm([v]);
                       }}
-                      disabled={active}
+                      disabled={busy || active}
                     />
                   )}
                 </div>
@@ -145,22 +204,22 @@ export default function Videos({
         <IconButton
           icon={CaretLeft}
           label="上一页"
-          disabled={page <= 1 || list.isFetching}
+          disabled={displayPage <= 1 || list.isFetching || busy}
           onClick={() => setPage((p) => p - 1)}
         />
-        <span>
-          {page} / {Math.max(1, Math.ceil((list.data?.total || 0) / 20))}
-        </span>
+        <span>{list.data ? `${displayPage} / ${pages}` : '— / —'}</span>
         <IconButton
           icon={CaretRight}
           label="下一页"
-          disabled={page * 20 >= (list.data?.total || 0) || list.isFetching}
+          disabled={displayPage >= pages || list.isFetching || busy}
           onClick={() => setPage((p) => p + 1)}
         />
       </div>
       <Dialog open={!!confirm} title="移入回收站" onClose={() => !busy && setConfirm(null)}>
         <ErrorNotice error={dialogError} />
-        <p className="admin-hint">视频将对上传者隐藏，保留期内可以恢复。</p>
+        <p className="admin-hint">
+          将 {confirm?.length || 0} 项视频移入回收站，对上传者隐藏；保留期内可以恢复。
+        </p>
         <ActionButton
           icon={Trash}
           label={busy ? '处理中' : '移入回收站'}
