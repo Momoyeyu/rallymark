@@ -15,11 +15,28 @@ test('homepage exposes upload and preview without an admin entry across mobile s
     '/preview',
   );
   expect(await page.locator('a[href^="/admin"]').count()).toBe(0);
-  for (const width of [320, 390, 768, 1440]) {
-    await page.setViewportSize({ width, height: 844 });
+  for (const [width, height] of [
+    [320, 740],
+    [390, 844],
+    [768, 1024],
+    [1024, 768],
+    [1440, 900],
+    [1920, 1080],
+    [2560, 1080],
+  ]) {
+    await page.setViewportSize({ width, height });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     ).toBeTruthy();
+    for (const selector of [
+      '.app-header',
+      '.landing-hero',
+      '.landing-showcase',
+      '.landing-footer',
+    ]) {
+      const box = (await page.locator(selector).boundingBox())!;
+      expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+    }
   }
   await page.getByRole('link', { name: '上传视频', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);

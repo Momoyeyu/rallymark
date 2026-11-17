@@ -17,30 +17,32 @@ export default function Home() {
         <ActionLink href="/preview" icon={Play} label="比赛预览" />
       </header>
       <main id="main-content">
-        <section className="landing-hero">
-          <h1>比赛很长，回看很快。</h1>
-          <p>标记每一回合，随时跳转，原片完整保留。</p>
-          <div className="landing-actions">
-            <ActionLink href="/app" icon={UploadSimple} label="上传视频" primary />
-            <ActionLink href="/preview" icon={Play} label="体验预览" />
-          </div>
-        </section>
-        <section className="landing-showcase" aria-label="体验回合播放">
-          {demo?.video.latest_analysis ? (
-            <Player
-              video={demo.video}
-              analysis={demo.video.latest_analysis}
-              mediaSrc={demo.media}
-              posterSrc={demo.poster}
-              local
-            />
-          ) : (
-            <a className="landing-fallback" href="/preview">
-              <Play size={48} />
-              <span>体验回合播放</span>
-            </a>
-          )}
-        </section>
+        <div className="landing-intro">
+          <section className="landing-hero">
+            <h1>比赛很长，回看很快。</h1>
+            <p>标记每一回合，随时跳转，原片完整保留。</p>
+            <div className="landing-actions">
+              <ActionLink href="/app" icon={UploadSimple} label="上传视频" primary />
+              <ActionLink href="/preview" icon={Play} label="体验预览" />
+            </div>
+          </section>
+          <section className="landing-showcase" aria-label="体验回合播放">
+            {demo?.video.latest_analysis ? (
+              <Player
+                video={demo.video}
+                analysis={demo.video.latest_analysis}
+                mediaSrc={demo.media}
+                posterSrc={demo.poster}
+                local
+              />
+            ) : (
+              <a className="landing-fallback" href="/preview">
+                <Play size={48} />
+                <span>体验回合播放</span>
+              </a>
+            )}
+          </section>
+        </div>
         <section className="landing-benefits" aria-label="产品功能">
           <div>
             <Scan />

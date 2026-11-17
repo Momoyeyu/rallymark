@@ -19,9 +19,10 @@
   box-sizing: border-box;
 }
 html {
-  scrollbar-gutter: stable;
+  scrollbar-gutter: stable both-edges;
 }
-html:has(:fullscreen) {
+html:has(:fullscreen, .player.fullscreen) {
+  overflow: hidden;
   scrollbar-gutter: auto;
 }
 .select-menu,
@@ -1056,16 +1057,7 @@ main {
 .bottom-actions > .action-button {
   flex: 1;
 }
-.player:fullscreen {
-  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
-    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-  background: var(--canvas);
-  overflow: auto;
-}
-.player:fullscreen .video-stage {
-  max-height: 75dvh;
-}
-.player:fullscreen .rally-browser {
+.fullscreen-tools {
   display: none;
 }
 @keyframes spin {
@@ -1176,22 +1168,113 @@ main {
 .select-option:focus-visible {
   box-shadow: inset 0 0 0 2px var(--lime);
 }
-@media (orientation: landscape) {
-  .player:fullscreen {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(268px, 320px);
-    gap: 16px;
-    align-items: stretch;
+.player:is(:fullscreen, .fullscreen) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  width: 100%;
+  height: 100dvh;
+  padding: 0;
+  background: #000;
+  overflow: hidden;
+}
+.player:is(:fullscreen, .fullscreen) .video-stage {
+  min-height: 0;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+.player:is(:fullscreen, .fullscreen) .video-stage video {
+  aspect-ratio: auto;
+}
+.player:is(:fullscreen, .fullscreen) .video-tools,
+.player:is(:fullscreen, .fullscreen) .rally-browser {
+  display: none;
+}
+.player:is(:fullscreen, .fullscreen) .playback-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: 'timeline timeline timeline' 'score transport actions';
+  align-items: center;
+  gap: 4px 16px;
+  padding: 4px max(16px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--canvas);
+}
+.player:is(:fullscreen, .fullscreen) .rally-heading {
+  display: contents;
+}
+.player:is(:fullscreen, .fullscreen) .rally-position {
+  grid-area: score;
+}
+.player:is(:fullscreen, .fullscreen) .rally-position .score-display {
+  width: 80px;
+  font-size: 26px;
+}
+.player:is(:fullscreen, .fullscreen) .auto-toggle {
+  grid-area: actions;
+  justify-self: start;
+  margin-right: 96px;
+}
+.player:is(:fullscreen, .fullscreen) .transport {
+  grid-area: transport;
+  --button-size: 44px;
+  min-height: 48px;
+  gap: 12px;
+}
+.player:is(:fullscreen, .fullscreen) .transport .icon-button.large {
+  --button-size: 48px;
+}
+.player:is(:fullscreen, .fullscreen) .fullscreen-tools {
+  grid-area: actions;
+  display: flex;
+  justify-self: end;
+}
+.player:is(:fullscreen, .fullscreen) .fullscreen-tools .icon-button {
+  --button-size: 44px;
+  --icon-size: 20px;
+}
+.player:is(:fullscreen, .fullscreen) .timeline {
+  grid-area: timeline;
+  position: relative;
+  padding-inline: 52px;
+}
+.player:is(:fullscreen, .fullscreen) .seek-times {
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  pointer-events: none;
+}
+.player:is(:fullscreen, .fullscreen) .player-feedback {
+  grid-column: 1 / -1;
+}
+@media (max-width: 800px) {
+  .player:is(:fullscreen, .fullscreen) .switch-caption,
+  .player:is(:fullscreen, .fullscreen) .auto-toggle > svg {
+    display: none;
   }
-  .player:fullscreen .video-stage {
-    min-height: 0;
-    max-height: none;
-    aspect-ratio: auto;
+  .player:is(:fullscreen, .fullscreen) .playback-panel {
+    column-gap: 8px;
   }
-  .player:fullscreen .playback-panel {
-    min-height: 0;
-    padding: 16px;
-    gap: 12px;
-    justify-content: space-between;
+  .player:is(:fullscreen, .fullscreen) .rally-position {
+    gap: 0;
+  }
+}
+@media (max-width: 599px) {
+  .player:is(:fullscreen, .fullscreen) .playback-panel {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'timeline timeline' 'score transport' 'auto actions';
+  }
+  .player:is(:fullscreen, .fullscreen) .auto-toggle {
+    grid-area: auto;
+    margin-right: 0;
   }
 }

@@ -374,7 +374,7 @@ test('custom picker keeps its bounds, keyboard selection and modal focus', async
 
 test('round pages remain complete and the custom timeline supports keyboard seeking', async ({
   page,
-}) => {
+}, testInfo) => {
   await preloaded(page, 1);
   const cards = page.locator('.rally-card');
   await expect(cards).toHaveCount(3);
@@ -399,22 +399,82 @@ test('round pages remain complete and the custom timeline supports keyboard seek
   await expect(range).toHaveValue('0');
   await range.press('End');
   await expect(range).toHaveValue('12');
-  await page.setViewportSize({ width: 844, height: 390 });
-  await page.getByRole('button', { name: '全屏', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBeTruthy();
-  await expect(page.getByRole('button', { name: '退出全屏', exact: true })).toBeVisible();
-  const fullscreen = await page.locator('.player').boundingBox();
-  expect(fullscreen!.width).toBe(844);
-  expect(fullscreen!.height).toBe(390);
-  expect(
-    await page.locator('.player').evaluate((node) => node.scrollHeight <= node.clientHeight + 1),
-  ).toBeTruthy();
-  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+  for (const [width, height] of [
+    [1440, 900],
+    [1920, 1080],
+    [844, 390],
+    [667, 375],
+    [390, 844],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.getByRole('button', { name: '全屏', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBeTruthy();
+    const fullscreen = (await page.locator('.player').boundingBox())!;
+    const stage = (await page.locator('.video-stage').boundingBox())!;
+    const panel = (await page.locator('.playback-panel').boundingBox())!;
+    expect(fullscreen.width).toBe(width);
+    expect(fullscreen.height).toBe(height);
+    expect(stage.width).toBe(width);
+    expect(panel.y).toBeGreaterThanOrEqual(stage.y + stage.height - 1);
+    expect(panel.height).toBeLessThan(height * 0.35);
+    expect(
+      await page
+        .locator('.player')
+        .evaluate(
+          (node) =>
+            node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth,
+        ),
+    ).toBeTruthy();
+    for (const name of ['退出全屏', '下一回合', '静音']) {
+      const control = page.getByRole('button', { name, exact: true });
+      await expect(control).toBeVisible();
+      const box = (await control.boundingBox())!;
+      expect(box.y).toBeGreaterThanOrEqual(panel.y);
+      expect(box.y + box.height).toBeLessThanOrEqual(height);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`fullscreen-${width}x${height}.png`) });
+    await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+  }
 
   expect(await page.locator('video').evaluate((v) => (v as HTMLVideoElement).paused)).toBeTruthy();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
   ).toBeTruthy();
+});
+
+test('mobile browsers without element fullscreen keep the shared controls in a full-viewport player', async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    Object.defineProperty(Element.prototype, 'requestFullscreen', {
+      value: undefined,
+      configurable: true,
+    }),
+  );
+  await page.setViewportSize({ width: 844, height: 390 });
+  await preloaded(page, 1);
+  await page.getByRole('button', { name: '全屏', exact: true }).click();
+  const exit = page.getByRole('button', { name: '退出全屏', exact: true });
+  await expect(exit).toBeVisible();
+  await expect(exit).toBeFocused();
+  const box = (await page.locator('.player').boundingBox())!;
+  expect(box).toEqual({ x: 0, y: 0, width: 844, height: 390 });
+  expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('slider', { name: '视频进度' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('video')).toBeFocused();
+  await page.getByRole('button', { name: '下一回合', exact: true }).click();
+  await expect
+    .poll(() => page.locator('video').evaluate((v) => (v as HTMLVideoElement).currentTime))
+    .toBeGreaterThan(0.3);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '全屏', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: '全屏', exact: true }).click();
+  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+  await expect(page.getByRole('button', { name: '全屏', exact: true })).toBeVisible();
 });
 
 test('product empty, running, failed and disconnected states share accessible controls', async ({

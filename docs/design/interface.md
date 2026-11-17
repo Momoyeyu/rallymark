@@ -23,6 +23,15 @@ Match title                         custom selector + settings
 
 Header, workspace toolbar and player share one page gutter and maximum width. Desktop columns share top and bottom boundaries. Narrow screens stack video and controls, with the selector and its adjacent action sharing a height and baseline. Titles truncate rather than move controls. Local-only settings live in a consistent modal rather than expanding the entire page.
 
+Fullscreen uses a full-width video above a compact bottom control strip, on both
+desktop and mobile landscape. Keep the timeline, score, centered transport,
+auto-skip, audio and exit controls visible without scrolling; hide the rally card
+browser. Portrait adds a short control row rather than squeezing touch targets.
+Preserve the video's aspect ratio with `object-fit: contain`. Browsers without
+element fullscreen use the same player expanded to the available viewport,
+including focus containment, Escape/button exit and restored focus; do not hand
+off to a native video-only surface that loses rally navigation.
+
 ## Components and contracts
 
 - Buttons, score badges, toggles, progress, dialogs, selectors, tooltips and file controls have one authoritative implementation in `apps/web/src/ui`.
@@ -41,7 +50,10 @@ The pre-redesign checkpoint is `ui-baseline-20261113` (`a24c9ea`), pushed to Git
 ## Product entry and management
 
 The selected homepage centers a concise headline and upload/preview actions over
-a working shared-player showcase. Stack the same content on mobile. The public
+a working shared-player showcase. Center this group within the available first
+screen on desktop, using fluid spacing and a centered maximum-width showcase.
+Reserve symmetric scrollbar gutters so the visual center remains the viewport
+center. Short screens grow naturally; mobile uses a normal flowing stack. The public
 header never includes management. `/app` retains upload/history, `/preview` stays
 read-only, and old root `?video=` links remain compatible.
 

@@ -22,6 +22,33 @@ import {
 } from './controller';
 import { track, type Video, type Analysis, type Rally } from '../api';
 
+function MediaActions({
+  muted,
+  isFullscreen,
+  onMute,
+  onFullscreen,
+}: {
+  muted: boolean;
+  isFullscreen: boolean;
+  onMute: () => void;
+  onFullscreen: () => void;
+}) {
+  return (
+    <>
+      <IconButton
+        label={muted ? '开启声音' : '静音'}
+        icon={muted ? SpeakerSlash : SpeakerHigh}
+        onClick={onMute}
+      />
+      <IconButton
+        label={isFullscreen ? '退出全屏' : '全屏'}
+        icon={isFullscreen ? CornersIn : CornersOut}
+        onClick={onFullscreen}
+      />
+    </>
+  );
+}
+
 export default function Player({
   video,
   analysis,
@@ -52,6 +79,37 @@ export default function Player({
     document.addEventListener('fullscreenchange', change);
     return () => document.removeEventListener('fullscreenchange', change);
   }, []);
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const element = shell.current;
+    element
+      ?.querySelector<HTMLButtonElement>('.fullscreen-tools button:last-child')
+      ?.focus({ preventScroll: true });
+    const keydown = (event: KeyboardEvent) => {
+      if (document.fullscreenElement) return;
+      if (event.key === 'Escape') setIsFullscreen(false);
+      if (event.key !== 'Tab' || !element) return;
+      const controls = Array.from(
+        element.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]'),
+      ).filter((node) => !node.hasAttribute('disabled') && node.getClientRects().length > 0);
+      const first = controls[0],
+        last = controls.at(-1);
+      if (
+        (event.shiftKey && document.activeElement === first) ||
+        (!event.shiftKey && document.activeElement === last)
+      ) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => {
+      document.removeEventListener('keydown', keydown);
+      element
+        ?.querySelector<HTMLButtonElement>('.video-tools button:last-child')
+        ?.focus({ preventScroll: true });
+    };
+  }, [isFullscreen]);
   const [error, setError] = useState(''),
     [buffering, setBuffering] = useState(false);
   const rallies = analysis.rallies;
@@ -109,20 +167,25 @@ export default function Player({
     if (element.paused) execute(controller.play(element.currentTime));
     else execute({ play: false });
   };
-  const fullscreen = () => {
+  const fullscreen = async () => {
     const element = shell.current;
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else if (element?.requestFullscreen)
-      void element.requestFullscreen().catch(() => setError('当前浏览器不支持全屏，可横屏观看'));
-    else {
-      const native = media.current as
-        (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
-      if (native?.webkitEnterFullscreen) native.webkitEnterFullscreen();
-      else setError('可旋转手机横屏观看');
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (isFullscreen) setIsFullscreen(false);
+    else if (element) {
+      try {
+        if (!element.requestFullscreen) throw new Error('Element fullscreen unavailable');
+        await element.requestFullscreen();
+      } catch {
+        setIsFullscreen(true);
+      }
     }
   };
   return (
-    <section className="player" ref={shell} aria-label="视频复盘播放器">
+    <section
+      className={`player${isFullscreen ? ' fullscreen' : ''}`}
+      ref={shell}
+      aria-label="视频复盘播放器"
+    >
       <div className="video-stage">
         <video
           ref={media}
@@ -180,15 +243,11 @@ export default function Player({
             {time(position)} / {time(video.duration_s)}
           </span>
           <div>
-            <IconButton
-              label={muted ? '开启声音' : '静音'}
-              icon={muted ? SpeakerSlash : SpeakerHigh}
-              onClick={() => setMuted(!muted)}
-            />
-            <IconButton
-              label={isFullscreen ? '退出全屏' : '全屏'}
-              icon={isFullscreen ? CornersIn : CornersOut}
-              onClick={fullscreen}
+            <MediaActions
+              muted={muted}
+              isFullscreen={isFullscreen}
+              onMute={() => setMuted(!muted)}
+              onFullscreen={fullscreen}
             />
           </div>
         </div>
@@ -239,6 +298,14 @@ export default function Player({
             tone="surface"
             disabled={navigationTarget(rallies, position, 1) < 0}
             onClick={() => navigate(1)}
+          />
+        </div>
+        <div className="fullscreen-tools">
+          <MediaActions
+            muted={muted}
+            isFullscreen={isFullscreen}
+            onMute={() => setMuted(!muted)}
+            onFullscreen={fullscreen}
           />
         </div>
         <Timeline
