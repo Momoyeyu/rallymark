@@ -1268,13 +1268,95 @@ main {
     gap: 0;
   }
 }
-@media (max-width: 599px) {
+@media (orientation: landscape) and (max-height: 600px) {
+  .player:is(:fullscreen, .fullscreen) .video-stage {
+    position: absolute;
+    inset: 0;
+  }
   .player:is(:fullscreen, .fullscreen) .playback-panel {
+    position: absolute;
+    inset: auto 0 0;
+    border: 0;
+    padding-top: 24px;
+    background: linear-gradient(transparent, #07170ef0 30%);
+    transition: opacity 150ms ease;
+  }
+  .player:is(:fullscreen, .fullscreen).controls-hidden .playback-panel:not(:has(:focus-visible)) {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+@media (orientation: portrait) {
+  .player:is(:fullscreen, .fullscreen) {
+    grid-template-rows: auto minmax(0, 1fr);
+    background: var(--canvas);
+  }
+  .player:is(:fullscreen, .fullscreen) .video-stage {
+    aspect-ratio: 16 / 9;
+    max-height: 45dvh;
+    margin-top: env(safe-area-inset-top);
+    padding-top: 0;
+  }
+  .player:is(:fullscreen, .fullscreen) .playback-panel {
+    min-height: 0;
+    overflow: hidden;
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'timeline timeline' 'score transport' 'auto actions';
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-areas: 'score actions' 'transport transport' 'timeline timeline' 'mode mode' 'rallies rallies';
+    gap: 8px 16px;
+    padding: 16px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+  .player:is(:fullscreen, .fullscreen) .rally-position {
+    gap: 12px;
+  }
+  .player:is(:fullscreen, .fullscreen) .rally-position .score-display {
+    width: 96px;
+    font-size: 32px;
   }
   .player:is(:fullscreen, .fullscreen) .auto-toggle {
-    grid-area: auto;
+    grid-area: mode;
+    justify-self: start;
     margin-right: 0;
+    padding-left: 0;
+  }
+  .player:is(:fullscreen, .fullscreen) .switch-caption,
+  .player:is(:fullscreen, .fullscreen) .auto-toggle > svg {
+    display: inline;
+  }
+  .player:is(:fullscreen, .fullscreen) .transport {
+    min-height: 72px;
+    gap: 24px;
+    --button-size: 52px;
+  }
+  .player:is(:fullscreen, .fullscreen) .transport .icon-button.large {
+    --button-size: 64px;
+  }
+  .player:is(:fullscreen, .fullscreen) .timeline {
+    padding-inline: 0;
+  }
+  .player:is(:fullscreen, .fullscreen) .seek-times {
+    position: static;
+  }
+  .player:is(:fullscreen, .fullscreen) .rally-browser {
+    grid-area: rallies;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    align-self: stretch;
+    overflow: hidden;
+  }
+  .player:is(:fullscreen, .fullscreen) .rally-browser-heading {
+    flex-shrink: 0;
+  }
+  .player:is(:fullscreen, .fullscreen) .rally-page-actions {
+    display: none;
+  }
+  .player:is(:fullscreen, .fullscreen) .rally-grid {
+    overflow: auto;
+    align-content: start;
+    min-height: 0;
+    overscroll-behavior: contain;
+    padding: 2px;
   }
 }

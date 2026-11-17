@@ -23,10 +23,13 @@ Match title                         custom selector + settings
 
 Header, workspace toolbar and player share one page gutter and maximum width. Desktop columns share top and bottom boundaries. Narrow screens stack video and controls, with the selector and its adjacent action sharing a height and baseline. Titles truncate rather than move controls. Local-only settings live in a consistent modal rather than expanding the entire page.
 
-Fullscreen uses a full-width video above a compact bottom control strip, on both
-desktop and mobile landscape. Keep the timeline, score, centered transport,
-auto-skip, audio and exit controls visible without scrolling; hide the rally card
-browser. Portrait adds a short control row rather than squeezing touch targets.
+Desktop fullscreen uses a full-width video above a compact bottom control strip.
+Phone landscape keeps the video at the full available height, overlays controls
+at the bottom, and hides them after 2.5 seconds of uninterrupted playback. A tap
+reveals controls; pause, buffering, errors and keyboard focus keep them available.
+Portrait anchors the video at the top and places score, transport, timeline,
+auto-skip and a scrollable complete rally list below it. Only the list scrolls;
+rotation preserves playback and does not require re-entering fullscreen.
 Preserve the video's aspect ratio with `object-fit: contain`. Browsers without
 element fullscreen use the same player expanded to the available viewport,
 including focus containment, Escape/button exit and restored focus; do not hand

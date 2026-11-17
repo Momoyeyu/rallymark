@@ -404,6 +404,7 @@ test('round pages remain complete and the custom timeline supports keyboard seek
     [1920, 1080],
     [844, 390],
     [667, 375],
+    [568, 320],
     [390, 844],
   ]) {
     await page.setViewportSize({ width, height });
@@ -415,8 +416,15 @@ test('round pages remain complete and the custom timeline supports keyboard seek
     expect(fullscreen.width).toBe(width);
     expect(fullscreen.height).toBe(height);
     expect(stage.width).toBe(width);
-    expect(panel.y).toBeGreaterThanOrEqual(stage.y + stage.height - 1);
-    expect(panel.height).toBeLessThan(height * 0.35);
+    if (width < height) {
+      expect(stage.height).toBeCloseTo((width * 9) / 16, 0);
+      await expect(page.getByRole('region', { name: '回合列表' })).toBeVisible();
+    } else if (height <= 600) {
+      expect(stage.height).toBe(height);
+    } else {
+      expect(panel.y).toBeGreaterThanOrEqual(stage.y + stage.height - 1);
+      expect(panel.height).toBeLessThan(height * 0.35);
+    }
     expect(
       await page
         .locator('.player')
@@ -475,6 +483,40 @@ test('mobile browsers without element fullscreen keep the shared controls in a f
   await page.getByRole('button', { name: '全屏', exact: true }).click();
   await page.getByRole('button', { name: '退出全屏', exact: true }).click();
   await expect(page.getByRole('button', { name: '全屏', exact: true })).toBeVisible();
+});
+
+test('phone landscape controls reveal on touch and rotation restores the portrait rally list', async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    Object.defineProperty(Element.prototype, 'requestFullscreen', {
+      value: undefined,
+      configurable: true,
+    }),
+  );
+  await preloaded(page, 1);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.getByRole('button', { name: '全屏', exact: true }).click();
+  await page.getByRole('switch', { name: '自动跳转' }).click();
+  await page.getByRole('button', { name: '播放', exact: true }).click();
+  await expect(page.locator('.player')).toHaveClass(/controls-hidden/, { timeout: 5000 });
+  await expect(page.locator('.playback-panel')).toHaveCSS('opacity', '0');
+  await page.locator('video').click();
+  await expect(page.locator('.player')).not.toHaveClass(/controls-hidden/);
+  await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('region', { name: '回合列表' })).toBeVisible();
+  await expect(page.locator('.rally-card')).toHaveCount(7);
+  const stage = (await page.locator('.video-stage').boundingBox())!;
+  expect(stage.height).toBeCloseTo((390 * 9) / 16, 0);
+  const timeline = (await page.locator('.timeline').boundingBox())!;
+  const mode = (await page.getByRole('switch', { name: '自动跳转' }).boundingBox())!;
+  const list = (await page.getByRole('region', { name: '回合列表' }).boundingBox())!;
+  expect(mode.y).toBeGreaterThanOrEqual(timeline.y + timeline.height);
+  expect(list.y).toBeGreaterThanOrEqual(mode.y + mode.height);
+  await page.getByRole('button', { name: '暂停', exact: true }).click();
+  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+  await expect(page.locator('.rally-card')).toHaveCount(3);
 });
 
 test('product empty, running, failed and disconnected states share accessible controls', async ({

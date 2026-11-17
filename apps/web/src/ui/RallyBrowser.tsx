@@ -4,24 +4,26 @@ import type { Rally } from '../api';
 import { time } from '../player/time';
 import { IconButton } from './controls';
 import { RallyCard } from './RallyCard';
-const pageSize = 3;
 export function RallyBrowser({
   rallies,
   active,
   hasScores,
   thumbnail,
   onSelect,
+  expanded = false,
 }: {
   rallies: Rally[];
   active: number;
   hasScores: boolean;
   thumbnail?: (rally: Rally) => string;
   onSelect: (index: number) => void;
+  expanded?: boolean;
 }) {
+  const pageSize = expanded ? Math.max(1, rallies.length) : 3;
   const [page, setPage] = useState(0);
   useEffect(() => {
     if (active >= 0) setPage(Math.floor(active / pageSize));
-  }, [active]);
+  }, [active, pageSize]);
   if (!rallies.length) return null;
   const pageCount = Math.ceil(rallies.length / pageSize);
   const current = Math.min(page, pageCount - 1);
@@ -33,7 +35,7 @@ export function RallyBrowser({
         <span className="rally-page-count" role="status">
           {start + 1}–{Math.min(start + pageSize, rallies.length)} / {rallies.length}
         </span>
-        <div className="rally-page-actions">
+        <div className="rally-page-actions" hidden={expanded}>
           <IconButton
             label="上一页回合"
             icon={CaretLeft}

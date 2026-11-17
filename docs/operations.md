@@ -58,6 +58,11 @@ SERVICE=algorithm-worker.
 
 A changed model snapshot requires a real GPU smoke run before promotion. CI verifies CPU behavior, but a GPU inference test is a deployment check. Model weights are not part of container image layers or Git history.
 
+The SPA entry document is served with `Cache-Control: no-cache` so navigation
+revalidates the current release instead of keeping an older player bundle through
+heuristic HTML caching. Check this header on both `/` and `/preview` after a web
+release; hashed assets remain separate from the entry document.
+
 ## Data cleanup and backups
 
 make data-clean previews expired business media and algorithm scratch data. Add APPLY=1 to execute, or VIDEO_ID=<uuid> to target a specific terminal video. The business cleanup command preserves ownership and task consistency and skips active work. Cleanup never removes the database, model weights or whole volumes.

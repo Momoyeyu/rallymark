@@ -74,6 +74,16 @@ export default function Player({
   const [automatic, setAutomatic] = useState(true),
     [muted, setMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [phoneLandscape, setPhoneLandscape] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    const query = window.matchMedia('(orientation: landscape) and (max-height: 600px)');
+    const change = () => setPhoneLandscape(query.matches);
+    change();
+    query.addEventListener('change', change);
+    return () => query.removeEventListener('change', change);
+  }, []);
   useEffect(() => {
     const change = () => setIsFullscreen(document.fullscreenElement === shell.current);
     document.addEventListener('fullscreenchange', change);
@@ -92,15 +102,11 @@ export default function Player({
       const controls = Array.from(
         element.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]'),
       ).filter((node) => !node.hasAttribute('disabled') && node.getClientRects().length > 0);
-      const first = controls[0],
-        last = controls.at(-1);
-      if (
-        (event.shiftKey && document.activeElement === first) ||
-        (!event.shiftKey && document.activeElement === last)
-      ) {
-        event.preventDefault();
-        (event.shiftKey ? last : first)?.focus();
-      }
+      if (!controls.length) return;
+      const current = controls.indexOf(document.activeElement as HTMLElement);
+      const next = (current + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+      event.preventDefault();
+      controls[next].focus();
     };
     document.addEventListener('keydown', keydown);
     return () => {
@@ -112,6 +118,16 @@ export default function Player({
   }, [isFullscreen]);
   const [error, setError] = useState(''),
     [buffering, setBuffering] = useState(false);
+  function revealControls() {
+    setControlsVisible(true);
+    clearTimeout(controlsTimer.current);
+    if (isFullscreen && phoneLandscape && playing && !buffering && !error)
+      controlsTimer.current = setTimeout(() => setControlsVisible(false), 2500);
+  }
+  useEffect(() => {
+    revealControls();
+    return () => clearTimeout(controlsTimer.current);
+  }, [isFullscreen, phoneLandscape, playing, buffering, error]);
   const rallies = analysis.rallies;
   const controller = useMemo(() => new PlaybackController(rallies), [rallies]);
   const hasScores = rallies.some((r) => r.score);
@@ -182,9 +198,18 @@ export default function Player({
   };
   return (
     <section
-      className={`player${isFullscreen ? ' fullscreen' : ''}`}
+      className={`player${isFullscreen ? ' fullscreen' : ''}${!controlsVisible ? ' controls-hidden' : ''}`}
       ref={shell}
       aria-label="视频复盘播放器"
+      onPointerMove={() => {
+        if (isFullscreen && phoneLandscape) revealControls();
+      }}
+      onPointerDown={() => {
+        if (isFullscreen && phoneLandscape) revealControls();
+      }}
+      onFocusCapture={() => {
+        if (isFullscreen && phoneLandscape) revealControls();
+      }}
     >
       <div className="video-stage">
         <video
@@ -231,7 +256,10 @@ export default function Player({
             setPosition(e.currentTime);
             executeTick(controller.tick(e.currentTime, e.paused));
           }}
-          onClick={togglePlay}
+          onClick={() => {
+            if (isFullscreen && phoneLandscape && playing) revealControls();
+            else togglePlay();
+          }}
         />
         {buffering && (
           <span className="buffering" role="status" aria-label="加载视频">
@@ -328,6 +356,7 @@ export default function Player({
           {!error && rallies.length === 0 && <p className="muted">暂无回合，可自由播放</p>}
         </div>
         <RallyBrowser
+          expanded={isFullscreen}
           rallies={rallies}
           active={active}
           hasScores={hasScores}
