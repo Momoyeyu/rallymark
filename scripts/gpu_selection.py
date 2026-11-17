@@ -3,6 +3,7 @@
 import csv
 import os
 import re
+import subprocess
 
 
 def selectors(value, count=0):
@@ -44,6 +45,15 @@ def override(root):
     )
     if not ids:
         return None
+    if any(identifier.isdigit() for identifier in ids):
+        output = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=index,uuid,name", "--format=csv,noheader"],
+            text=True,
+            timeout=10,
+        )
+        ids = resolve(
+            output, os.environ["GPU_DEVICE"], int(os.environ.get("GPU_COUNT") or 0)
+        )
     path = root / ".runtime" / "gpu-selection.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(

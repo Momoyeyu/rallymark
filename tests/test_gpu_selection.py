@@ -33,13 +33,28 @@ class SelectionTests(unittest.TestCase):
                 gpu.selectors(value, count)
 
     def test_override_limits_container_and_worker_to_same_pool(self):
-        with tempfile.TemporaryDirectory() as directory, patch.dict(
-            os.environ,
-            {"GPU_DEVICE": "GPU-aaa,GPU-bbb", "GPU_COUNT": "1"},
-            clear=True,
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(
+                os.environ,
+                {"GPU_DEVICE": "GPU-aaa,GPU-bbb", "GPU_COUNT": "1"},
+                clear=True,
+            ),
         ):
             result = gpu.override(Path(directory)).read_text()
             self.assertIn("devices: !override", result)
             self.assertIn("nvidia.com/gpu=GPU-aaa", result)
             self.assertIn("GPU_DEVICE: GPU-aaa", result)
             self.assertNotIn("GPU-bbb", result)
+
+    def test_numeric_override_resolves_host_index_before_container_renumbering(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(os.environ, {"GPU_DEVICE": "4", "GPU_COUNT": "1"}, clear=True),
+            patch.object(
+                gpu.subprocess, "check_output", return_value="4, GPU-bbb, RTX 4090\n"
+            ),
+        ):
+            result = gpu.override(Path(directory)).read_text()
+            self.assertIn("nvidia.com/gpu=GPU-bbb", result)
+            self.assertIn("GPU_DEVICE: GPU-bbb", result)
