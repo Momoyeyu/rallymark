@@ -254,3 +254,35 @@ database first; old volumes are a checkpoint, not a continuously updated replica
 Management storage statistics describe the media filesystem. The logical playback
 file total excludes retained source files, thumbnails, algorithm scratch and
 preview assets. See [administration](administration.md) for permissions and trash.
+
+## Selecting GPUs at deployment
+
+GPU identities and limits belong to the target's private startup configuration,
+not source defaults. Configure a pool before deployment:
+
+```sh
+make gpu-config GPU_DEVICE=<index-or-UUID-list> GPU_COUNT=<count>
+make config-apply
+# Or start a new immutable release:
+make deploy VERSION=<commit>
+```
+
+`gpu-config` resolves host indices to stable UUIDs, validates the count, saves a
+checkpoint and persists the selection in the target environment. Zero count means
+all listed cards; a positive count selects that many cards in the supplied order.
+`GPU_DEVICE=all` with a count can be resolved through `gpu-config`. For repeatable
+selection prefer an explicit list. Missing/duplicate devices and excessive counts
+are rejected; there is no fallback to an unselected card.
+
+Compose generates `.runtime/gpu-selection.yaml` from these startup settings,
+restricting both CDI device visibility and the worker allowlist to the same pool.
+The file is generated, never committed. Direct `GPU_DEVICE`/`GPU_COUNT` overrides
+with an explicit list also work on deploy/config-apply; use `gpu-config` to persist
+changes across subsequent commands/reboots. Legacy `GPU_CDI_DEVICE` applies only
+when the pool is unrestricted (`all`, count zero).
+
+Total selected cards differ from per-task parallelism: configure
+`max_gpus_per_job` and `max_concurrent_jobs` in the target's `GPU_POOL_FILE` through
+`make config-edit CONFIG_SCOPE=algorithm`. Set both to one for a serial single-card
+service. This policy remains inside the algorithm service; the business service
+has no GPU scheduling logic. Device model names are never selection rules.

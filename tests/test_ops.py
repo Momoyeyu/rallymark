@@ -291,15 +291,15 @@ class GpuPreflight(unittest.TestCase):
         with (
             patch.dict(
                 os.environ,
-                {"GPU_DEVICE": "GPU-selected", "MIN_GPU_MEMORY_GIB": "12"},
+                {"GPU_DEVICE": "GPU-aabb", "MIN_GPU_MEMORY_GIB": "12"},
                 clear=True,
             ),
             patch.object(
-                ops, "run", return_value="RTX 4080, GPU-selected, 16376, 15360\n"
+                ops, "run", return_value="RTX 4080, GPU-aabb, 16376, 15360\n"
             ) as run,
         ):
             ops.gpu_preflight()
-            self.assertIn("--id=GPU-selected", run.call_args.args[0])
+            self.assertIn("--id=GPU-aabb", run.call_args.args[0])
 
     def test_busy_gpu_fails_before_deployment(self):
         with (

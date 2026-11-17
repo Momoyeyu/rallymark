@@ -66,6 +66,7 @@ def forward_remote(action):
         "WEB_PORT",
         "BIND_ADDRESS",
         "GPU_DEVICE",
+        "GPU_COUNT",
         "WEIGHTS_PATH",
         "MIN_GPU_MEMORY_GIB",
         "GPU_MODE",
@@ -121,6 +122,11 @@ def compose(*args, capture=False, binary=False):
         files += ["-f", ROOT / "deploy/compose.dev.yaml"]
     elif os.environ.get("GPU_MODE", "enabled") == "disabled":
         files += ["-f", ROOT / "deploy/compose.unavailable.yaml"]
+    if os.environ.get("RALLYMARK_MODE") != "dev" and os.environ.get("GPU_MODE", "enabled") != "disabled":
+        from gpu_selection import override
+        selection = override(ROOT)
+        if selection:
+            files += ["-f", selection]
     return run(
         [
             "docker",
@@ -193,7 +199,9 @@ def version_directory():
 def gpu_preflight(*, require_free=True):
     if os.environ.get("RALLYMARK_MODE") == "dev":
         return
-    device = os.environ.get("GPU_DEVICE") or "0"
+    from gpu_selection import selectors
+    selected = selectors(os.environ.get("GPU_DEVICE") or "all", os.environ.get("GPU_COUNT") or 0)
+    device = ",".join(selected) if selected else "all"
     minimum = float(os.environ.get("MIN_GPU_MEMORY_GIB") or "12")
     if not math.isfinite(minimum) or minimum <= 0:
         raise ValueError("MIN_GPU_MEMORY_GIB must be a positive finite number")
@@ -414,7 +422,7 @@ def main():
     action = sys.argv[1] if len(sys.argv) > 1 else "help"
     if action == "help":
         print(
-            "setup dev check test build deploy rollback status logs doctor config-edit config-check config-apply data-clean smoke smoke-gpu backup restore sync storage-migrate preview-export preview-build"
+            "setup dev check test build deploy rollback status logs doctor config-edit config-check config-apply data-clean smoke smoke-gpu backup restore sync gpu-config storage-migrate preview-export preview-build"
         )
         print(
             "deploy/rollback VERSION=tag; logs SERVICE=api; data-clean [VIDEO_ID=id] [APPLY=1]; restore BACKUP=directory"
@@ -461,6 +469,9 @@ def main():
         business("status")
     elif action == "logs":
         compose("logs", "--follow", "--tail", "200", os.environ.get("SERVICE") or "api")
+    elif action == "gpu-config":
+        from gpu_selection import configure
+        configure(sys.modules[__name__])
     elif action == "storage-migrate":
         from storage import migrate_storage
         migrate_storage(sys.modules[__name__])

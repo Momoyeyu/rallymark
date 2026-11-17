@@ -59,3 +59,5 @@ All routes use the same web service and port. Export preview pairs with
 account is `admin` / `admin`; user changes and session revocation are available in
 the panel. See [administration](docs/administration.md) and
 [storage operations](docs/operations.md#video-storage-on-a-data-disk).
+
+Deployment GPU selection: `make gpu-config GPU_DEVICE=<list> GPU_COUNT=<count>`, then `make config-apply` or deploy. See [GPU startup configuration](docs/operations.md#selecting-gpus-at-deployment).
