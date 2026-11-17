@@ -22,14 +22,21 @@ import {
 } from './controller';
 import { track, type Video, type Analysis, type Rally } from '../api';
 
+type NativeFullscreenVideo = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+  webkitExitFullscreen?: () => void;
+};
+
 function MediaActions({
   muted,
   isFullscreen,
+  fullscreenAvailable,
   onMute,
   onFullscreen,
 }: {
   muted: boolean;
   isFullscreen: boolean;
+  fullscreenAvailable: boolean;
   onMute: () => void;
   onFullscreen: () => void;
 }) {
@@ -41,7 +48,15 @@ function MediaActions({
         onClick={onMute}
       />
       <IconButton
-        label={isFullscreen ? '退出全屏' : '全屏'}
+        label={
+          isFullscreen
+            ? fullscreenAvailable
+              ? '退出全屏'
+              : '收起播放器'
+            : fullscreenAvailable
+              ? '全屏'
+              : '展开播放器'
+        }
         icon={isFullscreen ? CornersIn : CornersOut}
         onClick={onFullscreen}
       />
@@ -74,6 +89,8 @@ export default function Player({
   const [automatic, setAutomatic] = useState(true),
     [muted, setMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenAvailable, setFullscreenAvailable] = useState(true);
+  const nativeFullscreen = useRef(false);
   const [phoneLandscape, setPhoneLandscape] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -86,9 +103,33 @@ export default function Player({
   }, []);
   useEffect(() => {
     const change = () => setIsFullscreen(document.fullscreenElement === shell.current);
+    const element = media.current as NativeFullscreenVideo | null;
+    setFullscreenAvailable(
+      Boolean(
+        (shell.current?.requestFullscreen && document.fullscreenEnabled !== false) ||
+        element?.webkitEnterFullscreen,
+      ),
+    );
+    const begin = () => {
+      nativeFullscreen.current = true;
+      setIsFullscreen(false);
+    };
+    const end = () => {
+      nativeFullscreen.current = false;
+      shell.current
+        ?.querySelector<HTMLButtonElement>('.video-tools button:last-child')
+        ?.focus({ preventScroll: true });
+    };
     document.addEventListener('fullscreenchange', change);
-    return () => document.removeEventListener('fullscreenchange', change);
-  }, []);
+    element?.addEventListener('webkitbeginfullscreen', begin);
+    element?.addEventListener('webkitendfullscreen', end);
+    return () => {
+      document.removeEventListener('fullscreenchange', change);
+      element?.removeEventListener('webkitbeginfullscreen', begin);
+      element?.removeEventListener('webkitendfullscreen', end);
+      nativeFullscreen.current = false;
+    };
+  }, [video.id]);
   useEffect(() => {
     if (!isFullscreen) return;
     const element = shell.current;
@@ -185,15 +226,29 @@ export default function Player({
   };
   const fullscreen = async () => {
     const element = shell.current;
-    if (document.fullscreenElement) await document.exitFullscreen();
+    const native = media.current as NativeFullscreenVideo | null;
+    setError('');
+    if (nativeFullscreen.current) native?.webkitExitFullscreen?.();
+    else if (document.fullscreenElement) await document.exitFullscreen();
     else if (isFullscreen) setIsFullscreen(false);
-    else if (element) {
+    else if (element?.requestFullscreen && document.fullscreenEnabled !== false) {
       try {
-        if (!element.requestFullscreen) throw new Error('Element fullscreen unavailable');
         await element.requestFullscreen();
       } catch {
-        setIsFullscreen(true);
+        setError('浏览器未允许全屏，请重试');
       }
+    } else if (native?.webkitEnterFullscreen) {
+      if (native.readyState < 1) {
+        setError('视频加载中，请稍后再点全屏');
+        return;
+      }
+      try {
+        native.webkitEnterFullscreen();
+      } catch {
+        setError('浏览器未允许全屏，请重试');
+      }
+    } else {
+      setIsFullscreen(true);
     }
   };
   return (
@@ -231,7 +286,11 @@ export default function Player({
           playsInline
           preload="metadata"
           muted={muted}
-          onPlay={() => setPlaying(true)}
+          onPlay={() => {
+            setPlaying(true);
+            if (nativeFullscreen.current && media.current)
+              execute(controller.play(media.current.currentTime));
+          }}
           onPause={() => setPlaying(false)}
           onWaiting={() => setBuffering(true)}
           onPlaying={() => setBuffering(false)}
@@ -274,6 +333,7 @@ export default function Player({
             <MediaActions
               muted={muted}
               isFullscreen={isFullscreen}
+              fullscreenAvailable={fullscreenAvailable}
               onMute={() => setMuted(!muted)}
               onFullscreen={fullscreen}
             />
@@ -332,6 +392,7 @@ export default function Player({
           <MediaActions
             muted={muted}
             isFullscreen={isFullscreen}
+            fullscreenAvailable={fullscreenAvailable}
             onMute={() => setMuted(!muted)}
             onFullscreen={fullscreen}
           />

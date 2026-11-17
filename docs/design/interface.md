@@ -31,9 +31,14 @@ Portrait anchors the video at the top and places score, transport, timeline,
 auto-skip and a scrollable complete rally list below it. Only the list scrolls;
 rotation preserves playback and does not require re-entering fullscreen.
 Preserve the video's aspect ratio with `object-fit: contain`. Browsers without
-element fullscreen use the same player expanded to the available viewport,
-including focus containment, Escape/button exit and restored focus; do not hand
-off to a native video-only surface that loses rally navigation.
+element fullscreen use the video's native fullscreen API when available. On
+iPhone this removes browser chrome but the system presents its own controls;
+custom score/navigation controls remain available inline. Native play/seek/time
+events still use the playback controller, and exit preserves position and focus.
+Invoke the native API directly from the tap, without awaiting media loading or a
+failed element request first. A rejected fullscreen request displays an error.
+Only devices with neither fullscreen API use viewport expansion, explicitly
+labelled “展开播放器” / “收起播放器”; that mode is not system fullscreen.
 
 ## Components and contracts
 
