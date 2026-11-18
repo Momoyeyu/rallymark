@@ -368,6 +368,8 @@ export default function App() {
       </footer>
       <Dialog
         open={panel !== null}
+        className={panel === 'login' || panel === 'register' ? 'account-dialog' : undefined}
+        headingIcon={panel === 'login' || panel === 'register' ? PingPong : undefined}
         onClose={() => {
           if (!busy) setPanel(null);
         }}
@@ -377,9 +379,9 @@ export default function App() {
             : panel === 'quota'
               ? '访客存储空间已满'
               : panel === 'login'
-                ? '登录 RallyMark'
+                ? '登录'
                 : panel === 'register'
-                  ? '注册 RallyMark'
+                  ? '创建账号'
                   : panel === 'delete'
                     ? '删除视频'
                     : '历史视频'

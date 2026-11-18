@@ -1,3 +1,102 @@
+.account-dialog {
+  --account-gutter: clamp(18px, 5vw, 30px);
+  width: min(420px, calc(100% - 32px));
+}
+.account-dialog .dialog-heading {
+  padding: 20px var(--account-gutter) 0;
+  border: 0;
+}
+.account-dialog .dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.account-dialog .dialog-title > svg {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  padding: 9px;
+  color: var(--lime);
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+}
+.account-dialog .dialog-title h2 {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+}
+.account-dialog .dialog-heading .icon-button {
+  --button-size: 44px;
+  --icon-size: 18px;
+  margin-inline-end: -8px;
+  color: var(--muted);
+}
+.account-dialog .dialog-content {
+  padding: 10px var(--account-gutter) 16px;
+}
+.account-form,
+.account-fields {
+  display: grid;
+  gap: 16px;
+}
+.account-intro {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.account-form-error {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #795342;
+  border-radius: var(--control-radius);
+  background: #30231c;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.account-form-error svg {
+  flex: 0 0 18px;
+  height: 18px;
+}
+.account-form .account-submit {
+  width: 100%;
+  min-height: 52px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.account-switch {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.account-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--lime);
+  font-weight: 600;
+}
+.account-switch button:hover:not(:disabled) {
+  background: var(--raised);
+}
+.account-switch button svg {
+  width: 14px;
+  height: 14px;
+}
 .product-dialog {
   display: grid;
   gap: 16px;

@@ -1,0 +1,88 @@
+.form-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.form-field-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.form-field-label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  text-align: end;
+}
+.form-field-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding-inline: 14px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--canvas);
+}
+.form-field-control:focus-within {
+  border-color: var(--lime);
+  box-shadow: 0 0 0 3px #c6f56816;
+}
+.form-field-glyph {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.form-field-control:focus-within .form-field-glyph {
+  color: var(--lime);
+}
+.form-field-control input {
+  min-width: 0;
+  min-height: 52px;
+  flex: 1 1 0;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 0;
+  appearance: none;
+  background: transparent;
+  color: inherit;
+  caret-color: var(--lime);
+  font-size: 16px;
+  outline: 0;
+}
+.form-field-control input:focus-visible {
+  outline: 0;
+}
+.form-field-control:not(:has(.form-field-reveal)) input {
+  margin-inline-end: 8px;
+}
+.form-field-control input::placeholder {
+  color: var(--muted);
+  opacity: 0.76;
+}
+.form-field-control input:autofill {
+  box-shadow: 0 0 0 60px var(--canvas) inset;
+  -webkit-text-fill-color: #f3f7ee;
+}
+.form-field-control input::-ms-reveal {
+  display: none;
+}
+.form-field-reveal {
+  --button-size: 44px;
+  --icon-size: 19px;
+  color: var(--muted);
+  outline-offset: -3px;
+}
+.form-field[data-invalid] .form-field-control {
+  border-color: var(--danger);
+}
+.form-field-error {
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
