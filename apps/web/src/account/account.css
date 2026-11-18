@@ -117,19 +117,39 @@
 .product-dialog-actions .action-button {
   flex: 1 1 auto;
 }
-.history-account {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+.account-profile {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--canvas);
 }
-.history-account > div {
-  min-width: 0;
+.account-profile dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.account-profile dd {
+  margin: 0;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
-.history-account .action-button {
+.history-quota {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.history-quota-full {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 14px;
+}
+.history-quota-full .action-button {
   flex-shrink: 0;
 }
 .history-row {

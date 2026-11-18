@@ -34,7 +34,16 @@ const stages: Record<string, string> = {
   postprocessing: '整理回合',
 };
 type Account = components['schemas']['Account'];
-type Panel = 'history' | 'guest-upload' | 'quota' | 'login' | 'register' | 'delete';
+const panelTitles = {
+  account: '账户',
+  history: '历史视频',
+  'guest-upload': '以访客身份上传',
+  quota: '访客存储空间已满',
+  login: '登录',
+  register: '创建账号',
+  delete: '删除视频',
+};
+type Panel = keyof typeof panelTitles;
 
 async function refreshSession() {
   await request('/session', { method: 'POST' });
@@ -127,13 +136,15 @@ export default function App() {
   }
   async function logout() {
     setSigningOut(true);
+    setPanelError('');
     try {
       await client.cancelQueries({ queryKey: ['session'] });
       await request('/account/logout', { method: 'POST' });
       selectVideo(null);
       client.setQueryData(['session'], await refreshSession());
+      setPanel(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e : new ApiError('退出登录失败，请重试。'));
+      setPanelError(e instanceof ApiError ? e.message : '退出登录失败，请重试。');
     } finally {
       setSigningOut(false);
     }
@@ -199,6 +210,7 @@ export default function App() {
     }
   }
   const failure = error || session.error || detail.error || videos.error;
+  const authForm = panel === 'login' || panel === 'register';
   return (
     <div className="app-shell product-app">
       <a className="skip-link" href="#main-content">
@@ -206,12 +218,12 @@ export default function App() {
       </a>
       <header className="app-header">
         <Brand />
-        <nav aria-label="视频操作">
+        <nav aria-label="账户与视频">
           <IconButton
             label={account ? '账户 · ' + account : '登录或注册'}
             icon={account ? UserCircle : SignIn}
             disabled={!session.isSuccess || uploading !== null || signingOut}
-            onClick={() => openPanel(account ? 'history' : 'login')}
+            onClick={() => openPanel(account ? 'account' : 'login')}
           />
           <IconButton
             label="历史视频"
@@ -368,24 +380,12 @@ export default function App() {
       </footer>
       <Dialog
         open={panel !== null}
-        className={panel === 'login' || panel === 'register' ? 'account-dialog' : undefined}
-        headingIcon={panel === 'login' || panel === 'register' ? PingPong : undefined}
+        className={authForm || panel === 'account' ? 'account-dialog' : undefined}
+        headingIcon={authForm ? PingPong : panel === 'account' ? UserCircle : undefined}
         onClose={() => {
-          if (!busy) setPanel(null);
+          if (!busy && !signingOut) setPanel(null);
         }}
-        title={
-          panel === 'guest-upload'
-            ? '以访客身份上传'
-            : panel === 'quota'
-              ? '访客存储空间已满'
-              : panel === 'login'
-                ? '登录'
-                : panel === 'register'
-                  ? '创建账号'
-                  : panel === 'delete'
-                    ? '删除视频'
-                    : '历史视频'
-        }
+        title={panel ? panelTitles[panel] : ''}
         side={panel === 'history'}
       >
         {(panel === 'guest-upload' || panel === 'quota') && (
@@ -421,7 +421,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {(panel === 'login' || panel === 'register') && (
+        {authForm && (
           <AccountForm
             key={panel}
             mode={panel}
@@ -429,6 +429,25 @@ export default function App() {
             onSwitch={() => openPanel(panel === 'login' ? 'register' : 'login')}
             onBusy={setBusy}
           />
+        )}
+        {panel === 'account' && (
+          <div className="account-form">
+            <dl className="account-profile">
+              <dt>用户名</dt>
+              <dd>{account}</dd>
+            </dl>
+            {panelError && (
+              <p className="account-form-error" role="alert">
+                {panelError}
+              </p>
+            )}
+            <ActionButton
+              icon={SignOut}
+              label={signingOut ? '退出中' : '退出登录'}
+              disabled={signingOut}
+              onClick={() => void logout()}
+            />
+          </div>
         )}
         {panel === 'delete' && deletion && (
           <div className="product-dialog">
@@ -457,33 +476,23 @@ export default function App() {
         )}
         {panel === 'history' && (
           <>
-            <div className="history-account">
-              <div>
-                <strong>{account || '访客'}</strong>
-                {quota && (
-                  <p className="muted">
-                    存储空间 {quota.used}
-                    {quota.limit == null ? ' 个视频' : '/' + quota.limit}
-                  </p>
-                )}
-              </div>
-              {account ? (
-                <ActionButton
-                  icon={SignOut}
-                  label="退出登录"
-                  disabled={signingOut || uploading !== null}
-                  onClick={() => void logout()}
-                />
-              ) : (
+            {quota && (
+              <p className="history-quota">
+                存储空间 {quota.used}
+                {quota.limit == null ? ' 个视频' : '/' + quota.limit}
+              </p>
+            )}
+            {quotaFull && (
+              <div className="history-quota-full">
+                <p className="muted">存储空间已满。登录或删除一个视频后可继续上传。</p>
                 <ActionButton
                   icon={SignIn}
                   label="登录"
                   disabled={uploading !== null}
                   onClick={() => openPanel('login')}
                 />
-              )}
-            </div>
-            {quotaFull && <p className="muted">存储空间已满。登录或删除一个视频后可继续上传。</p>}
+              </div>
+            )}
             {videos.isLoading ? (
               <p>读取中…</p>
             ) : !videos.data?.items.length ? (

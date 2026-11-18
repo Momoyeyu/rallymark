@@ -57,5 +57,13 @@ test('guest upload dialog dismisses outside, opens the picker and offers login w
   await dialog.getByRole('button', { name: '登录', exact: true }).click();
   await expect(dialog).toBeHidden();
   await page.getByRole('button', { name: '账户 · viewer' }).click();
+  await expect(dialog).toHaveAccessibleName('账户');
+  await expect(dialog).toContainText('viewer');
+  await expect(dialog.getByRole('button', { name: '退出登录' })).toBeVisible();
+  await expect(dialog).not.toContainText('存储空间');
+  await dialog.getByRole('button', { name: '关闭账户' }).click();
+  await page.getByRole('button', { name: '历史视频', exact: true }).click();
+  await expect(dialog).toHaveAccessibleName('历史视频');
   await expect(dialog).toContainText('存储空间 5 个视频');
+  await expect(dialog.getByRole('button', { name: '退出登录' })).toHaveCount(0);
 });
