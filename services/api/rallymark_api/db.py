@@ -21,6 +21,10 @@ def now():
     return datetime.now(timezone.utc)
 
 
+def as_utc(value: datetime) -> datetime:
+    return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
 class Base(DeclarativeBase):
     __table_args__ = {"schema": "business"}
 
@@ -39,6 +43,13 @@ class UserSession(Base):
     __tablename__ = "user_sessions"
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("business.users.id"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    scope: Mapped[str] = mapped_column(String(16), default="admin", server_default="admin")
+
+
+class GuestSession(Base):
+    __tablename__ = "guest_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 

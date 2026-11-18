@@ -72,12 +72,25 @@ read-only web mount and remain independent of algorithm health. No management li
 is exposed in the public product navigation. The previous separate preview image
 and Compose project have been retired.
 
-Public uploads continue using the existing anonymous owner hash. `videos.user_id`
-is a nullable foreign key reserved for future authenticated ownership; existing
-records are not reassigned. Shared users have roles and active state; management
-uses an independent HttpOnly cookie and revocable database sessions. Admin login
-never grants ownership through public media APIs. Details and management behavior
-are maintained in [administration](administration.md).
+Guests can upload, analyze and play videos without signing in. The product renews
+the guest session only while the page is visible, every 30 seconds and on return.
+After five minutes without renewal, the guest loses access. Retention cleanup
+removes the videos and results once their analyses finish. The grace period
+handles brief backgrounding, refreshes and mobile browsers that skip close events.
+
+Guest history displays up to five videos. The client checks capacity before
+sending the file, and publication rechecks quota while holding the guest row lock.
+Deleting a completed or failed video releases its slot. Product registration or
+login atomically assigns all accessible videos from that guest to `videos.user_id`.
+The same lock serializes claiming and upload publication. Product accounts share
+history across their independently revocable device sessions and have no video
+count or analysis concurrency quota. Existing media retention still applies.
+
+Management and product use separate scoped HttpOnly sessions. Signed-in product
+access checks the account ID; guest access requires an active session and matching
+owner hash on an unclaimed video. Serve account login over HTTPS with
+`application.session_cookie_secure: true`. Plans can extend the quota policy
+independently from admin roles. See [management behavior](administration.md).
 
 Media and algorithm-work mounts are configurable separately from PostgreSQL and
 weights. A data-mount guard protects host-local deployments; a later storage

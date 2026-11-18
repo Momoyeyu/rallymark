@@ -1,7 +1,6 @@
 import asyncio
 import hashlib
 import os
-import re
 import secrets
 import time
 import threading
@@ -20,6 +19,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .accounts import account_router, identify, require_upload_slot, visible_videos
 from .errors import ApiError
 from .admin import management_router
 from .availability import CapacityUnavailable, check_capacity
@@ -29,8 +29,7 @@ from .dispatcher import run_dispatcher
 from .logging import configure
 from .media import InvalidVideo, probe, public_metadata, MAX_PIXELS
 from .preparation import run_preparer
-
-COOKIE = "rallymark_session"
+from .ops import cleanup
 
 
 class Rally(BaseModel):
@@ -206,6 +205,8 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
         management_router(factory, settings, config, video_json, VideoResponse, logger)
     )
 
+    app.include_router(account_router(factory, config))
+
     @app.middleware("http")
     async def request_context(request, call_next):
         request.state.request_id = str(uuid4())
@@ -244,7 +245,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                     status_code=500,
                 )
         response.headers["X-Request-ID"] = request.state.request_id
-        if request.url.path.startswith("/api/v1/admin"):
+        if request.url.path.startswith(("/api/v1/admin", "/api/v1/account", "/api/v1/session")):
             response.headers["Cache-Control"] = "no-store"
         logger.info(
             "http_request",
@@ -299,12 +300,6 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             status_code=422,
         )
 
-    def owner(request):
-        token = request.cookies.get(COOKIE, "")
-        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
-            raise ApiError(401, "session_required", "请刷新页面后重试。")
-        return hashlib.sha256(token.encode()).hexdigest()
-
     def internal(request):
         expected = "Bearer " + settings.internal_token.get_secret_value()
         if not secrets.compare_digest(request.headers.get("authorization", ""), expected):
@@ -313,9 +308,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
     def owned(db, identifier, request, lock=False):
         query = select(Video).where(
             Video.id == str(identifier),
-            Video.owner == owner(request),
-            Video.deleting.is_(False),
-            Video.trashed_at.is_(None),
+            *visible_videos(identify(db, request)),
         )
         video = db.scalar(query.with_for_update() if lock else query)
         if video is None:
@@ -338,8 +331,8 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
 
     @app.get("/api/v1/availability")
     def availability(request: Request):
-        owner(request)
         with factory() as db:
+            require_upload_slot(db, identify(db, request))
             admit_analysis(db)
         return capacity(request.state.request_id)
 
@@ -353,24 +346,10 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
     def media_path(video):
         return settings.media_root / (video.id + ".mp4")
 
-    @app.post("/api/v1/session", status_code=204)
-    def session(request: Request, response: Response):
-        token = request.cookies.get(COOKIE, "")
-        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
-            token = secrets.token_urlsafe(32)
-        response.set_cookie(
-            COOKIE,
-            token,
-            max_age=30 * 86400,
-            httponly=True,
-            secure=config.application.session_cookie_secure,
-            samesite="lax",
-            path="/",
-        )
-
     @app.get("/api/v1/upload-policy", response_model=UploadPolicy)
     def upload_policy(request: Request):
-        owner(request)
+        with factory() as db:
+            identify(db, request)
         return {
             "max_upload_bytes": config.application.max_upload_bytes,
             "max_duration_seconds": config.application.max_duration_seconds,
@@ -395,18 +374,16 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
         file: UploadFile = File(...),
         idempotency_key: str | None = Header(default=None, max_length=200),
     ):
-        identity = owner(request)
-        if idempotency_key:
-            with factory() as db:
+        with factory() as db:
+            identity = identify(db, request)
+            if idempotency_key:
                 existing = db.scalar(
-                    select(Video).where(
-                        Video.owner == identity,
-                        Video.upload_key == idempotency_key,
-                    )
+                    select(Video).where(identity.owns(), Video.upload_key == idempotency_key)
                 )
                 if existing:
                     await file.close()
                     return repeated_upload(db, existing)
+            require_upload_slot(db, identity)
         await asyncio.to_thread(capacity, request.state.request_id)
         identifier = str(uuid4())
         temp = temporary / (identifier + ".upload")
@@ -446,19 +423,24 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             await asyncio.to_thread(capacity, request.state.request_id)
             os.replace(temp, source if preparation else final)
             with factory.begin() as db:
+                current = identify(db, request, lock_guest=True)
+                if current.owner != identity.owner:
+                    raise ApiError(409, "session_changed", "会话已变更，请重新上传。")
                 if idempotency_key:
                     existing = db.scalar(
                         select(Video).where(
-                            Video.owner == identity,
+                            identity.owns(),
                             Video.upload_key == idempotency_key,
                         )
                     )
                     if existing:
                         return repeated_upload(db, existing)
+                require_upload_slot(db, current)
                 admit_analysis(db)
                 video = Video(
                     id=identifier,
-                    owner=identity,
+                    owner=identity.owner,
+                    user_id=identity.user.id if identity.user else None,
                     upload_key=idempotency_key,
                     title=Path((file.filename or "video.mp4").replace("\\", "/")).name[:255],
                     size_bytes=size,
@@ -492,7 +474,7 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
                 with factory() as db:
                     existing = db.scalar(
                         select(Video).where(
-                            Video.owner == identity,
+                            identity.owns(),
                             Video.upload_key == idempotency_key,
                         )
                     )
@@ -512,13 +494,9 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
             items = db.scalars(
                 select(Video)
                 .where(
-                    Video.owner == owner(request),
-                    Video.deleting.is_(False),
-                    Video.trashed_at.is_(None),
-                    Video.expires_at > now(),
+                    *visible_videos(identify(db, request)),
                 )
                 .order_by(Video.created_at.desc())
-                .limit(100)
             )
             return {"items": [video_json(db, item) for item in items]}
 
@@ -526,6 +504,20 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
     def get_video(identifier: UUID, request: Request):
         with factory() as db:
             return video_json(db, owned(db, identifier, request))
+
+    @app.delete("/api/v1/videos/{identifier}", status_code=204)
+    def remove_video(identifier: UUID, request: Request):
+        with factory.begin() as db:
+            video = owned(db, identifier, request, lock=True)
+            active = db.scalar(
+                select(Analysis.id)
+                .where(Analysis.video_id == video.id, Analysis.status.in_(ACTIVE))
+                .limit(1)
+            )
+            if active:
+                raise ApiError(409, "video_active", "请等分析完成后再删除视频。")
+            video.deleting = True
+        cleanup(factory, settings.media_root, apply=True, video_id=str(identifier))
 
     @app.post("/api/v1/videos/{identifier}/analyses", response_model=AnalysisResponse)
     def analyze(
@@ -697,7 +689,8 @@ def create_app(settings=None, engine=None, probe_video=probe, capacity_check=Non
 
     @app.post("/api/v1/events", status_code=204)
     def events(batch: EventBatch, request: Request):
-        owner(request)
+        with factory() as db:
+            identify(db, request)
         allowed = {"seconds", "enabled", "direction", "code", "duration_ms", "source"}
         for event in batch.events:
             properties = {

@@ -7,6 +7,10 @@ import {
   ArrowClockwise,
   CheckCircle,
   FilmStrip,
+  SignIn,
+  SignOut,
+  Trash,
+  UserCircle,
 } from '@phosphor-icons/react';
 import Player from './player/Player';
 import { preflight, type UploadPolicy } from './uploadPreflight';
@@ -15,6 +19,9 @@ import { IconButton, ActionButton } from './ui/controls';
 import { Brand } from './ui/Brand';
 import { Notice } from './ui/Notice';
 import { Dialog } from './ui/Dialog';
+import { AccountForm } from './account/AccountForm';
+import type { components } from './api.generated';
+import './account/account.css';
 import { Progress } from './ui/Progress';
 import { ApiError, request, upload, track, type Video } from './api';
 
@@ -26,34 +33,48 @@ const stages: Record<string, string> = {
   ocr: '读取比分',
   postprocessing: '整理回合',
 };
+type Account = components['schemas']['Account'];
+type Panel = 'history' | 'guest-upload' | 'quota' | 'login' | 'register' | 'delete';
+
+async function refreshSession() {
+  await request('/session', { method: 'POST' });
+  return request<Account>('/account');
+}
+
 export default function App() {
   const client = useQueryClient(),
     input = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<string | null>(() =>
     new URLSearchParams(location.search).get('video'),
   );
-  const [history, setHistory] = useState(false),
-    [uploading, setUploading] = useState<number | null>(null);
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const [deletion, setDeletion] = useState<Video | null>(null);
+  const [panelError, setPanelError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [uploading, setUploading] = useState<number | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<ApiError | null>(null),
     [retrying, setRetrying] = useState(false);
   const session = useQuery({
     queryKey: ['session'],
-    queryFn: async () => {
-      await request('/session', { method: 'POST' });
-      return true;
-    },
-    staleTime: Infinity,
+    queryFn: refreshSession,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     retry: 1,
   });
+  const account = session.data?.username;
+  const quota = session.data?.quota;
+  const scope = session.data?.id ?? 'guest';
+  const quotaFull = quota?.limit != null && quota.used >= quota.limit;
   const videos = useQuery({
-    queryKey: ['videos'],
+    queryKey: ['videos', scope],
     queryFn: () => request<{ items: Video[] }>('/videos'),
     enabled: session.isSuccess,
     refetchInterval: () => (selected || uploading !== null ? 3000 : false),
   });
   const detail = useQuery({
-    queryKey: ['video', selected],
+    queryKey: ['video', scope, selected],
     queryFn: () => request<Video>('/videos/' + selected),
     enabled: session.isSuccess && !!selected,
     refetchInterval: (query) => {
@@ -61,7 +82,7 @@ export default function App() {
       return status && ['succeeded', 'failed'].includes(status) ? false : 2000;
     },
   });
-  const video = detail.data,
+  const video = detail.isError ? undefined : detail.data,
     analysis = video?.latest_analysis;
   const completed = useRef<string | null>(null);
   useEffect(() => {
@@ -70,13 +91,71 @@ export default function App() {
       track({ name: 'analysis_completed', video_id: video?.id, analysis_id: analysis.id });
     }
   }, [analysis?.status, analysis?.id, video?.id]);
-  function choose(id: string) {
+  function selectVideo(id: string | null) {
     setSelected(id);
-    setHistory(false);
     setError(null);
     const url = new URL(location.href);
-    url.searchParams.set('video', id);
+    if (id) url.searchParams.set('video', id);
+    else url.searchParams.delete('video');
     window.history.replaceState({}, '', url);
+  }
+  function choose(id: string) {
+    selectVideo(id);
+    setPanel(null);
+  }
+  function openPanel(next: Panel) {
+    setPanelError('');
+    setPanel(next);
+    if (next === 'history' || next === 'guest-upload' || next === 'quota') {
+      void client.invalidateQueries({ queryKey: ['session'] });
+      void client.invalidateQueries({ queryKey: ['videos'] });
+    }
+  }
+  function beginUpload() {
+    if (account) input.current?.click();
+    else openPanel(quotaFull ? 'quota' : 'guest-upload');
+  }
+  async function authenticate(mode: 'login' | 'register', username: string, password: string) {
+    await client.cancelQueries({ queryKey: ['session'] });
+    const current = await request<Account>('/account/' + mode, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    client.setQueryData(['session'], current);
+    setPanel(null);
+  }
+  async function logout() {
+    setSigningOut(true);
+    try {
+      await client.cancelQueries({ queryKey: ['session'] });
+      await request('/account/logout', { method: 'POST' });
+      selectVideo(null);
+      client.setQueryData(['session'], await refreshSession());
+    } catch (e) {
+      setError(e instanceof ApiError ? e : new ApiError('退出登录失败，请重试。'));
+    } finally {
+      setSigningOut(false);
+    }
+  }
+  async function removeVideo() {
+    if (!deletion || busy) return;
+    setBusy(true);
+    setPanelError('');
+    try {
+      await request('/videos/' + deletion.id, { method: 'DELETE' });
+      if (selected === deletion.id) selectVideo(null);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['session'] }),
+        client.invalidateQueries({ queryKey: ['videos'] }),
+      ]);
+      setDeletion(null);
+      setPanel('history');
+    } catch (e) {
+      setPanelError(e instanceof ApiError ? e.message : '删除失败，请重试。');
+    } finally {
+      setBusy(false);
+    }
   }
   async function onUpload(file?: File) {
     if (!file || uploading !== null) return;
@@ -89,11 +168,13 @@ export default function App() {
       await request('/availability');
       setChecking(false);
       const result = await upload(file, setUploading);
-      client.setQueryData(['video', result.id], result);
+      client.setQueryData(['video', scope, result.id], result);
       choose(result.id);
       void client.invalidateQueries({ queryKey: ['videos'] });
+      void client.invalidateQueries({ queryKey: ['session'] });
     } catch (e) {
-      setError(e instanceof ApiError ? e : new ApiError('上传失败，请重试'));
+      if (e instanceof ApiError && e.code === 'guest_quota') openPanel('quota');
+      else setError(e instanceof ApiError ? e : new ApiError('上传失败，请重试'));
       track({ name: 'upload_failed' });
     } finally {
       setUploading(null);
@@ -110,7 +191,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Idempotency-Key': crypto.randomUUID?.() || String(Date.now()) },
       });
-      await client.invalidateQueries({ queryKey: ['video', video.id] });
+      await client.invalidateQueries({ queryKey: ['video', scope, video.id] });
     } catch (e) {
       setError(e instanceof ApiError ? e : new ApiError('重试失败'));
     } finally {
@@ -119,7 +200,7 @@ export default function App() {
   }
   const failure = error || session.error || detail.error || videos.error;
   return (
-    <div className="app-shell">
+    <div className="app-shell product-app">
       <a className="skip-link" href="#main-content">
         跳到内容
       </a>
@@ -127,15 +208,21 @@ export default function App() {
         <Brand />
         <nav aria-label="视频操作">
           <IconButton
+            label={account ? '账户 · ' + account : '登录或注册'}
+            icon={account ? UserCircle : SignIn}
+            disabled={!session.isSuccess || uploading !== null || signingOut}
+            onClick={() => openPanel(account ? 'history' : 'login')}
+          />
+          <IconButton
             label="历史视频"
             icon={ClockCounterClockwise}
-            onClick={() => setHistory(true)}
+            onClick={() => openPanel('history')}
           />
           <IconButton
             label="上传视频"
             icon={UploadSimple}
-            disabled={!session.isSuccess || uploading !== null}
-            onClick={() => input.current?.click()}
+            disabled={!session.isSuccess || uploading !== null || signingOut}
+            onClick={beginUpload}
           />
         </nav>
       </header>
@@ -186,7 +273,9 @@ export default function App() {
             <Player key={analysis.id} video={video} analysis={analysis} />
             <Notice messages={analysis.warnings} />
             <p className="expiry">
-              保存至 {new Date(video.expires_at).toLocaleDateString('zh-CN')}
+              {account
+                ? '保存至 ' + new Date(video.expires_at).toLocaleDateString('zh-CN')
+                : '访客记录仅在本次会话有效'}
             </p>
           </>
         ) : video && analysis?.status === 'failed' ? (
@@ -224,7 +313,11 @@ export default function App() {
             ) : (
               <Progress label="分析进行中" />
             )}
-            <p className="muted">可以离开页面，稍后从历史中查看结果</p>
+            <p className="muted">
+              {account
+                ? '可以离开页面，稍后从历史中查看结果'
+                : '请保持页面打开，登录后可在其他设备回看'}
+            </p>
           </section>
         ) : selected && (detail.isPending || session.isPending) ? (
           <section className="status-page">
@@ -245,60 +338,194 @@ export default function App() {
               icon={UploadSimple}
               label="选择视频"
               tone="primary"
-              disabled={!session.isSuccess}
-              onClick={() => input.current?.click()}
+              disabled={!session.isSuccess || signingOut}
+              onClick={beginUpload}
             />
             <small>MP4 / MOV · 最大 500 MB / 15 分钟</small>
             {!!videos.data?.items.length && (
               <ActionButton
                 icon={ClockCounterClockwise}
                 label="历史视频"
-                onClick={() => setHistory(true)}
+                onClick={() => openPanel('history')}
               />
             )}
           </section>
         )}
       </main>
       <footer className="bottom-actions">
-        <ActionButton icon={ClockCounterClockwise} label="历史" onClick={() => setHistory(true)} />
+        <ActionButton
+          icon={ClockCounterClockwise}
+          label="历史"
+          onClick={() => openPanel('history')}
+        />
         <ActionButton
           icon={UploadSimple}
           label="上传"
           tone="primary"
-          disabled={!session.isSuccess || uploading !== null}
-          onClick={() => input.current?.click()}
+          disabled={!session.isSuccess || uploading !== null || signingOut}
+          onClick={beginUpload}
         />
       </footer>
-      <Dialog open={history} onClose={() => setHistory(false)} title="历史视频" side>
-        <p className="muted">保留七天，仅此浏览器可见</p>
-        {videos.isLoading ? (
-          <p>读取中…</p>
-        ) : !videos.data?.items.length ? (
-          <p className="empty">还没有视频，开始第一次分析吧。</p>
-        ) : (
-          videos.data.items.map((v) => (
-            <button
-              key={v.id}
-              className={'history-item ' + (v.id === selected ? 'chosen' : '')}
-              onClick={() => choose(v.id)}
-            >
-              <span>
-                <strong>{v.title}</strong>
-                <small>
-                  {time(v.duration_s)} · {new Date(v.created_at).toLocaleDateString('zh-CN')}
-                </small>
-              </span>
-              {v.latest_analysis?.status === 'succeeded' ? (
-                <CheckCircle aria-hidden="true" />
+      <Dialog
+        open={panel !== null}
+        onClose={() => {
+          if (!busy) setPanel(null);
+        }}
+        title={
+          panel === 'guest-upload'
+            ? '以访客身份上传'
+            : panel === 'quota'
+              ? '访客存储空间已满'
+              : panel === 'login'
+                ? '登录 RallyMark'
+                : panel === 'register'
+                  ? '注册 RallyMark'
+                  : panel === 'delete'
+                    ? '删除视频'
+                    : '历史视频'
+        }
+        side={panel === 'history'}
+      >
+        {(panel === 'guest-upload' || panel === 'quota') && (
+          <div className="product-dialog">
+            <p>
+              {panel === 'quota' || quotaFull
+                ? '登录后会自动保存本次记录。也可以删除一个视频，再继续上传。'
+                : '退出页面后，本次视频和分析记录会失效。登录可保存记录，并在其他设备查看。'}
+            </p>
+            <div className="product-dialog-actions">
+              <ActionButton
+                icon={SignIn}
+                label="现在登录"
+                tone="primary"
+                onClick={() => openPanel('login')}
+              />
+              {panel === 'quota' || quotaFull ? (
+                <ActionButton
+                  icon={ClockCounterClockwise}
+                  label="管理视频"
+                  onClick={() => openPanel('history')}
+                />
               ) : (
-                <span className="history-status">
-                  {v.latest_analysis?.status === 'failed'
-                    ? '分析失败'
-                    : stages[v.latest_analysis?.status || ''] || '正在处理'}
-                </span>
+                <ActionButton
+                  icon={UploadSimple}
+                  label="继续上传"
+                  onClick={() => {
+                    setPanel(null);
+                    input.current?.click();
+                  }}
+                />
               )}
-            </button>
-          ))
+            </div>
+          </div>
+        )}
+        {(panel === 'login' || panel === 'register') && (
+          <AccountForm
+            key={panel}
+            mode={panel}
+            onSubmit={(username, password) => authenticate(panel, username, password)}
+            onSwitch={() => openPanel(panel === 'login' ? 'register' : 'login')}
+            onBusy={setBusy}
+          />
+        )}
+        {panel === 'delete' && deletion && (
+          <div className="product-dialog">
+            <p>删除「{deletion.title}」及其分析记录？</p>
+            {panelError && (
+              <p className="error" role="alert">
+                {panelError}
+              </p>
+            )}
+            <div className="product-dialog-actions">
+              <ActionButton
+                icon={Trash}
+                label="删除视频"
+                tone="danger"
+                disabled={busy}
+                onClick={() => void removeVideo()}
+              />
+              <ActionButton
+                icon={ClockCounterClockwise}
+                label="返回历史"
+                disabled={busy}
+                onClick={() => openPanel('history')}
+              />
+            </div>
+          </div>
+        )}
+        {panel === 'history' && (
+          <>
+            <div className="history-account">
+              <div>
+                <strong>{account || '访客'}</strong>
+                {quota && (
+                  <p className="muted">
+                    存储空间 {quota.used}
+                    {quota.limit == null ? ' 个视频' : '/' + quota.limit}
+                  </p>
+                )}
+              </div>
+              {account ? (
+                <ActionButton
+                  icon={SignOut}
+                  label="退出登录"
+                  disabled={signingOut || uploading !== null}
+                  onClick={() => void logout()}
+                />
+              ) : (
+                <ActionButton
+                  icon={SignIn}
+                  label="登录"
+                  disabled={uploading !== null}
+                  onClick={() => openPanel('login')}
+                />
+              )}
+            </div>
+            {quotaFull && <p className="muted">存储空间已满。登录或删除一个视频后可继续上传。</p>}
+            {videos.isLoading ? (
+              <p>读取中…</p>
+            ) : !videos.data?.items.length ? (
+              <p className="empty">还没有视频，开始第一次分析吧。</p>
+            ) : (
+              videos.data.items.map((v) => (
+                <div className="history-row" key={v.id}>
+                  <button
+                    className={'history-item ' + (v.id === selected ? 'chosen' : '')}
+                    onClick={() => choose(v.id)}
+                  >
+                    <span>
+                      <strong>{v.title}</strong>
+                      <small>
+                        {time(v.duration_s)} · {new Date(v.created_at).toLocaleDateString('zh-CN')}
+                      </small>
+                    </span>
+                    {v.latest_analysis?.status === 'succeeded' ? (
+                      <CheckCircle aria-hidden="true" />
+                    ) : (
+                      <span className="history-status">
+                        {v.latest_analysis?.status === 'failed'
+                          ? '分析失败'
+                          : stages[v.latest_analysis?.status || ''] || '正在处理'}
+                      </span>
+                    )}
+                  </button>
+                  <IconButton
+                    icon={Trash}
+                    tone="danger"
+                    label={'删除 ' + v.title}
+                    disabled={Boolean(
+                      v.latest_analysis &&
+                      !['succeeded', 'failed'].includes(v.latest_analysis.status),
+                    )}
+                    onClick={() => {
+                      setDeletion(v);
+                      openPanel('delete');
+                    }}
+                  />
+                </div>
+              ))
+            )}
+          </>
         )}
       </Dialog>
     </div>

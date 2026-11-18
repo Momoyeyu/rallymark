@@ -7,6 +7,7 @@ export class ApiError extends Error {
     message: string,
     readonly requestId?: string,
     readonly status?: number,
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -19,6 +20,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       body.error?.message || '请求失败，请稍后重试',
       body.error?.request_id,
       response.status,
+      body.error?.code,
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();
@@ -45,7 +47,15 @@ export function upload(file: File, progress: (percent: number) => void): Promise
         return;
       }
       if (xhr.status >= 200 && xhr.status < 300) resolve(body);
-      else reject(new ApiError(body.error?.message || '上传失败', body.error?.request_id));
+      else
+        reject(
+          new ApiError(
+            body.error?.message || '上传失败',
+            body.error?.request_id,
+            xhr.status,
+            body.error?.code,
+          ),
+        );
     };
     const form = new FormData();
     form.append('file', file);

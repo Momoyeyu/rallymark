@@ -5,7 +5,7 @@ from uuid import uuid4
 from .identity import password_hash
 
 from .config import Settings
-from .db import Base, Maintenance, User, UserSession, LoginLimit, AuditEvent, connect
+from .db import Base, Maintenance, User, UserSession, GuestSession, LoginLimit, AuditEvent, connect
 
 
 def migrate(engine):
@@ -45,7 +45,7 @@ def migrate(engine):
                 )
             connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (2)"))
         if 3 not in versions:
-            for model in (User, UserSession, LoginLimit, AuditEvent):
+            for model in (User, UserSession, GuestSession, LoginLimit, AuditEvent):
                 model.__table__.create(connection, checkfirst=True)
             columns = {
                 column["name"]
@@ -79,6 +79,27 @@ def migrate(engine):
                     )
                 )
             connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (3)"))
+        if 4 not in versions:
+            GuestSession.__table__.create(connection, checkfirst=True)
+            columns = inspect(connection).get_columns(
+                "user_sessions", schema="business" if prefix else None
+            )
+            if not any(column["name"] == "scope" for column in columns):
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {prefix}user_sessions ADD COLUMN scope VARCHAR(16) DEFAULT 'admin' NOT NULL"
+                    )
+                )
+            # Let existing browser cookies recover already-uploaded guest videos.
+            connection.execute(
+                text(
+                    f"INSERT INTO {prefix}guest_sessions (token_hash, expires_at) "
+                    f"SELECT owner, MAX(expires_at) FROM {prefix}videos "
+                    "WHERE user_id IS NULL AND expires_at > CURRENT_TIMESTAMP GROUP BY owner "
+                    "ON CONFLICT (token_hash) DO NOTHING"
+                )
+            )
+            connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (4)"))
 
 
 def main():

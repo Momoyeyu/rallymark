@@ -431,3 +431,66 @@ def test_migration_adds_media_ready_time_to_existing_database(tmp_path):
     migrate(engine)
     assert "ready_at" in {column["name"] for column in inspect(engine).get_columns("analyses")}
     engine.dispose()
+
+
+def test_product_account_claims_guest_uploads_and_supports_independent_device_tokens(context):
+    phone, app, factory, _ = context
+    guest_video = upload(phone).json()
+    with factory() as db:
+        guest_owner = db.get(Video, guest_video["id"]).owner
+    credentials = {"username": "Match_Viewer", "password": "my-long-rally-password"}
+    result = phone.post("/api/v1/account/register", json=credentials)
+    assert result.status_code == 201
+    assert result.json()["username"] == "match_viewer"
+    with TestClient(app) as desktop:
+        assert desktop.post("/api/v1/account/login", json=credentials).status_code == 200
+        assert desktop.get(f"/api/v1/videos/{guest_video['id']}/media").status_code == 200
+        assert (
+            desktop.get(f"/api/v1/analyses/{guest_video['latest_analysis']['id']}").status_code
+            == 200
+        )
+        assert desktop.get("/api/v1/admin/me").status_code == 401
+        assert phone.post("/api/v1/account/logout").status_code == 204
+        assert phone.get(f"/api/v1/videos/{guest_video['id']}").status_code == 401
+        assert desktop.get(f"/api/v1/videos/{guest_video['id']}").status_code == 200
+        assert desktop.get("/api/v1/account").json()["quota"]["limit"] is None
+    with factory() as db:
+        claimed = db.get(Video, guest_video["id"])
+        assert claimed.user_id == result.json()["id"]
+        assert claimed.owner != guest_owner
+
+
+def test_guest_quota_rejects_sixth_and_can_release_a_finished_slot(context):
+    client, _, factory, _ = context
+    uploads = [upload(client) for _ in range(5)]
+    assert all(response.status_code == 201 for response in uploads)
+    assert client.get("/api/v1/account").json()["quota"] == {"used": 5, "limit": 5}
+    assert client.get("/api/v1/availability").json()["error"]["code"] == "guest_quota"
+    assert upload(client).json()["error"]["code"] == "guest_quota"
+    video = uploads[0].json()
+    endpoint = f"/api/v1/videos/{video['id']}"
+    assert client.delete(endpoint).status_code == 409
+    with factory.begin() as db:
+        db.get(Analysis, video["latest_analysis"]["id"]).status = "succeeded"
+    assert client.delete(endpoint).status_code == 204
+    assert upload(client).status_code == 201
+
+
+def test_expired_guest_cannot_view_or_claim_and_cleanup_waits_for_running_work(context):
+    from rallymark_api.accounts import GUEST_COOKIE
+    from rallymark_api.db import GuestSession
+    from rallymark_api.identity import token_hash
+
+    client, _, factory, settings = context
+    item = upload(client).json()
+    key = token_hash(client.cookies.get(GUEST_COOKIE))
+    with factory.begin() as db:
+        db.get(GuestSession, key).expires_at = now() - timedelta(seconds=1)
+    assert client.get(f"/api/v1/videos/{item['id']}/media").status_code == 401
+    assert cleanup(factory, settings.media_root, apply=True)["video_ids"] == []
+    assert client.post("/api/v1/session").status_code == 204
+    assert token_hash(client.cookies.get(GUEST_COOKIE)) != key
+    assert client.get("/api/v1/videos").json()["items"] == []
+    with factory.begin() as db:
+        db.get(Analysis, item["latest_analysis"]["id"]).status = "succeeded"
+    assert cleanup(factory, settings.media_root, apply=True)["video_ids"] == [item["id"]]

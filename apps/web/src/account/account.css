@@ -1,0 +1,51 @@
+.product-dialog {
+  display: grid;
+  gap: 16px;
+}
+.product-dialog > p {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.product-dialog > .error {
+  color: var(--danger);
+}
+.product-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.product-dialog-actions .action-button {
+  flex: 1 1 auto;
+}
+.history-account {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.history-account > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.history-account .action-button {
+  flex-shrink: 0;
+}
+.history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.history-row .history-item {
+  gap: 8px;
+}
+@media (max-width: 370px) {
+  .product-app .app-header {
+    gap: 4px;
+  }
+  .product-app .app-header nav {
+    gap: 0;
+  }
+}

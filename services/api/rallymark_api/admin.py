@@ -93,7 +93,11 @@ def management_router(factory, settings, config, video_json, video_model, logger
     def current(request: Request):
         with factory() as db:
             session = db.get(UserSession, token_hash(request.cookies.get(COOKIE, "")))
-            if session is None or session.expires_at.replace(tzinfo=UTC) <= now():
+            if (
+                session is None
+                or session.scope != "admin"
+                or session.expires_at.replace(tzinfo=UTC) <= now()
+            ):
                 raise ApiError(401, "login_required", "请登录管理面板。")
             user = db.get(User, session.user_id)
             if user is None or not user.active:
@@ -152,7 +156,8 @@ def management_router(factory, settings, config, video_json, video_model, logger
                 db.execute(delete(UserSession).where(UserSession.expires_at < now()))
                 db.execute(
                     delete(UserSession).where(
-                        UserSession.token_hash == token_hash(request.cookies.get(COOKIE, ""))
+                        UserSession.token_hash == token_hash(request.cookies.get(COOKIE, "")),
+                        UserSession.scope == "admin",
                     )
                 )
                 token = secrets.token_urlsafe(32)
@@ -188,7 +193,8 @@ def management_router(factory, settings, config, video_json, video_model, logger
         with factory.begin() as db:
             db.execute(
                 delete(UserSession).where(
-                    UserSession.token_hash == token_hash(request.cookies.get(COOKIE, ""))
+                    UserSession.token_hash == token_hash(request.cookies.get(COOKIE, "")),
+                    UserSession.scope == "admin",
                 )
             )
         response.delete_cookie(COOKIE, path=COOKIE_PATH)

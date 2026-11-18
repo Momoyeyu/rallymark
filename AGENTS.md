@@ -21,9 +21,9 @@ Read README.md for setup, docs/architecture.md for service boundaries, and docs/
 - `apps/web/src/site`, `/preview` and `/admin` share one production web image.
   The six-match preview reuses the player and has no upload/import/API dependency.
   Keep management entry points out of public navigation. See docs/administration.md.
-- Admin authentication never substitutes for the anonymous demo owner cookie.
-  Video.user_id remains nullable until product account integration is explicitly
-  enabled. Preserve existing owner hashes and do not bulk-assign old videos.
+- Admin and product tokens have separate scopes. Product media ownership uses
+  `Video.user_id` for accounts and the active guest owner hash for visitors.
+  Claim only the current guest's accessible videos on successful product login.
 - Passwords use salted hashes, sessions use hashed opaque tokens, and account
   changes revoke sessions. Keep the last active administrator and reversible
   video trash protections. Never return password/session hashes to the browser.

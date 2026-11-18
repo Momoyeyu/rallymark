@@ -5,10 +5,10 @@ import shutil
 from datetime import timedelta
 from pathlib import Path
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, exists, func, or_, select
 
 from .config import Settings
-from .db import ACTIVE, Analysis, Maintenance, Video, connect, now
+from .db import ACTIVE, Analysis, GuestSession, Maintenance, Video, connect, now
 
 
 def cleanup(factory, root, apply=False, video_id=None):
@@ -18,7 +18,16 @@ def cleanup(factory, root, apply=False, video_id=None):
         query = (
             query.where(Video.id == video_id)
             if video_id
-            else query.where(or_(Video.expires_at < now(), Video.deleting.is_(True)))
+            else query.where(
+                or_(
+                    Video.expires_at < now(),
+                    Video.deleting.is_(True),
+                    Video.user_id.is_(None)
+                    & exists().where(
+                        GuestSession.token_hash == Video.owner, GuestSession.expires_at <= now()
+                    ),
+                )
+            )
         )
         for video in db.scalars(query):
             active = db.scalar(
@@ -40,6 +49,16 @@ def cleanup(factory, root, apply=False, video_id=None):
             with factory.begin() as db:
                 db.execute(delete(Analysis).where(Analysis.video_id == identifier))
                 db.execute(delete(Video).where(Video.id == identifier, Video.deleting.is_(True)))
+        if not video_id:
+            with factory.begin() as db:
+                db.execute(
+                    delete(GuestSession).where(
+                        GuestSession.expires_at <= now(),
+                        ~exists().where(
+                            Video.owner == GuestSession.token_hash, Video.user_id.is_(None)
+                        ),
+                    )
+                )
         for path in (root / "temporary").glob("*.upload"):
             if path.stat().st_mtime < time.time() - timedelta(days=1).total_seconds():
                 path.unlink(missing_ok=True)

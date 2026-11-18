@@ -7,11 +7,12 @@ existing password. Change credentials through the user editor when appropriate.
 
 ## Boundaries
 
-- The public `/app` remains an anonymous demo. Its existing cookie and owner
-  hashes are unchanged; management login does not change its history or access.
+- The public `/app` supports both guests and product accounts. Management login
+  uses a separate cookie and session scope and leaves product history unchanged.
 - Users have a stable UUID, normalized unique username, salted scrypt password
-  hash, `admin`/`member` role and enabled state. New accounts do not automatically
-  acquire anonymous videos. `videos.user_id` is nullable for future integration.
+  hash, `admin`/`member` role and enabled state. Product login automatically
+  attaches the current guest's accessible videos to that account. The existing
+  `videos.user_id` foreign key supplies the owner label.
 - Member accounts can authenticate but cannot use management APIs. Only active
   administrators can inspect all videos/storage/users or change them.
 - Sessions are opaque random tokens, hashed in PostgreSQL, expire after 12 hours,

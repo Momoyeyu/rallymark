@@ -274,3 +274,51 @@ def test_password_reset_serializes_with_inflight_login(tmp_path, monkeypatch):
     with factory.begin() as db:
         db.execute(delete(UserSession).where(UserSession.user_id == identifier))
         db.execute(delete(User).where(User.id == identifier))
+
+
+def test_concurrent_guest_uploads_cannot_share_the_last_slot(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from fastapi.testclient import TestClient
+
+    from rallymark_api.app import create_app
+
+    settings = Settings(
+        database_url=os.environ["TEST_DATABASE_URL"],
+        internal_token="integration-test-token",
+        media_root=tmp_path,
+        dispatcher_enabled=False,
+    )
+    engine, _ = connect(settings.database_url)
+    migrate(engine)
+    gate = Barrier(2)
+
+    def probe(path, _limit):
+        if path.read_bytes() == b"contender":
+            gate.wait(timeout=10)
+        return {"duration_s": 12, "width": 1920, "height": 1080}
+
+    app = create_app(settings, engine, probe, capacity_check=lambda: {"state": "ready"})
+
+    def submit(client, body):
+        return client.post("/api/v1/videos", files={"file": ("match.mp4", body, "video/mp4")})
+
+    with TestClient(app) as phone, TestClient(app) as other_tab:
+        assert phone.post("/api/v1/session").status_code == 204
+        other_tab.cookies.update(phone.cookies)
+        assert all(submit(phone, b"first").status_code == 201 for _ in range(4))
+        with ThreadPoolExecutor(2) as pool:
+            responses = list(
+                pool.map(lambda client: submit(client, b"contender"), [phone, other_tab])
+            )
+        assert sorted(r.status_code for r in responses) == [201, 409]
+        assert phone.get("/api/v1/account").json()["quota"] == {"used": 5, "limit": 5}
+        registration = phone.post(
+            "/api/v1/account/register",
+            json={"username": "test-" + uuid4().hex, "password": "long-test-password"},
+        )
+        assert registration.status_code == 201
+        assert registration.json()["quota"] == {"used": 5, "limit": None}
+        assert other_tab.get("/api/v1/videos").status_code == 401
+        assert submit(phone, b"account").status_code == 201
