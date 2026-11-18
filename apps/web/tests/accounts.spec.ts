@@ -44,7 +44,16 @@ test('guest upload dialog dismisses outside, opens the picker and offers login w
   await expect(dialog.getByRole('button', { name: '继续上传' })).toHaveCount(0);
   await dialog.getByRole('button', { name: '现在登录' }).click();
   await dialog.getByLabel('用户名', { exact: true }).fill('viewer');
-  await dialog.getByLabel('密码', { exact: true }).fill('test-password');
+  const fields = dialog.locator('.form-field-control');
+  await expect(fields).toHaveCount(2);
+  const widths = await fields.evaluateAll((nodes) => nodes.map((node) => node.clientWidth));
+  expect(widths[0]).toBe(widths[1]);
+  const password = dialog.getByLabel('密码', { exact: true });
+  await password.fill('test-password');
+  await dialog.getByRole('button', { name: '显示密码' }).click();
+  await expect(password).toHaveAttribute('type', 'text');
+  await dialog.getByRole('button', { name: '隐藏密码' }).click();
+  await expect(password).toHaveAttribute('type', 'password');
   await dialog.getByRole('button', { name: '登录', exact: true }).click();
   await expect(dialog).toBeHidden();
   await page.getByRole('button', { name: '账户 · viewer' }).click();
