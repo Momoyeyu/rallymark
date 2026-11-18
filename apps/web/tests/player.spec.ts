@@ -452,78 +452,19 @@ test('round pages remain complete and the custom timeline supports keyboard seek
   ).toBeTruthy();
 });
 
-test('iPhone fullscreen invokes native video presentation directly and preserves rally playback', async ({
-  page,
-}) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(document, 'fullscreenEnabled', { value: false, configurable: true });
-    Object.defineProperty(HTMLVideoElement.prototype, 'webkitEnterFullscreen', {
-      configurable: true,
-      value: function (this: HTMLVideoElement) {
-        if (!navigator.userActivation.isActive) throw new Error('Missing user activation');
-        this.dataset.nativeFullscreen = 'true';
-        this.dispatchEvent(new Event('webkitbeginfullscreen'));
-      },
-    });
-  });
-  await preloaded(page, 1);
-  await page.getByRole('button', { name: '全屏', exact: true }).click();
-  await expect(page.locator('video')).toHaveAttribute('data-native-fullscreen', 'true');
-  await expect(page.locator('.player')).not.toHaveClass(/fullscreen/);
-  await page.locator('video').evaluate((v) => {
-    let previous = (v as HTMLVideoElement).currentTime;
-    v.addEventListener('timeupdate', () => {
-      if ((v as HTMLVideoElement).currentTime - previous > 0.65)
-        (v as HTMLElement).dataset.rallySkipped = 'true';
-      previous = (v as HTMLVideoElement).currentTime;
-    });
-  });
-  await page.locator('video').evaluate((v) => (v as HTMLVideoElement).play());
-  await expect
-    .poll(() => page.locator('video').evaluate((v) => (v as HTMLVideoElement).currentTime))
-    .toBeGreaterThanOrEqual(1.6);
-  await expect(page.locator('video')).toHaveAttribute('data-rally-skipped', 'true');
-  await page.locator('video').evaluate((v) => {
-    (v as HTMLVideoElement).pause();
-    v.dispatchEvent(new Event('webkitendfullscreen'));
-  });
-  await expect(page.getByRole('button', { name: '全屏', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '全屏', exact: true })).toBeFocused();
-  await expect(page.locator('.player')).not.toHaveClass(/fullscreen/);
-});
-
-test('a rejected fullscreen request reports failure without pretending viewport expansion is fullscreen', async ({
+test('mobile browsers without element fullscreen keep the shared controls in a full-viewport player', async ({
   page,
 }) => {
   await page.addInitScript(() =>
     Object.defineProperty(Element.prototype, 'requestFullscreen', {
+      value: undefined,
       configurable: true,
-      value: () => Promise.reject(new Error('Fullscreen denied')),
     }),
   );
-  await preloaded(page, 1);
-  await page.getByRole('button', { name: '全屏', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('浏览器未允许全屏');
-  await expect(page.locator('.player')).not.toHaveClass(/fullscreen/);
-});
-
-test('mobile browsers without element fullscreen keep the shared controls in a full-viewport player', async ({
-  page,
-}) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(Element.prototype, 'requestFullscreen', {
-      value: undefined,
-      configurable: true,
-    });
-    Object.defineProperty(HTMLVideoElement.prototype, 'webkitEnterFullscreen', {
-      value: undefined,
-      configurable: true,
-    });
-  });
   await page.setViewportSize({ width: 844, height: 390 });
   await preloaded(page, 1);
-  await page.getByRole('button', { name: '展开播放器', exact: true }).click();
-  const exit = page.getByRole('button', { name: '收起播放器', exact: true });
+  await page.getByRole('button', { name: '全屏', exact: true }).click();
+  const exit = page.getByRole('button', { name: '退出全屏', exact: true });
   await expect(exit).toBeVisible();
   await expect(exit).toBeFocused();
   const box = (await page.locator('.player').boundingBox())!;
@@ -538,28 +479,24 @@ test('mobile browsers without element fullscreen keep the shared controls in a f
     .poll(() => page.locator('video').evaluate((v) => (v as HTMLVideoElement).currentTime))
     .toBeGreaterThan(0.3);
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: '展开播放器', exact: true })).toBeFocused();
-  await page.getByRole('button', { name: '展开播放器', exact: true }).click();
-  await page.getByRole('button', { name: '收起播放器', exact: true }).click();
-  await expect(page.getByRole('button', { name: '展开播放器', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '全屏', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: '全屏', exact: true }).click();
+  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+  await expect(page.getByRole('button', { name: '全屏', exact: true })).toBeVisible();
 });
 
 test('phone landscape controls reveal on touch and rotation restores the portrait rally list', async ({
   page,
 }) => {
-  await page.addInitScript(() => {
+  await page.addInitScript(() =>
     Object.defineProperty(Element.prototype, 'requestFullscreen', {
       value: undefined,
       configurable: true,
-    });
-    Object.defineProperty(HTMLVideoElement.prototype, 'webkitEnterFullscreen', {
-      value: undefined,
-      configurable: true,
-    });
-  });
+    }),
+  );
   await preloaded(page, 1);
   await page.setViewportSize({ width: 844, height: 390 });
-  await page.getByRole('button', { name: '展开播放器', exact: true }).click();
+  await page.getByRole('button', { name: '全屏', exact: true }).click();
   await page.getByRole('switch', { name: '自动跳转' }).click();
   await page.getByRole('button', { name: '播放', exact: true }).click();
   await expect(page.locator('.player')).toHaveClass(/controls-hidden/, { timeout: 5000 });
@@ -578,7 +515,7 @@ test('phone landscape controls reveal on touch and rotation restores the portrai
   expect(mode.y).toBeGreaterThanOrEqual(timeline.y + timeline.height);
   expect(list.y).toBeGreaterThanOrEqual(mode.y + mode.height);
   await page.getByRole('button', { name: '暂停', exact: true }).click();
-  await page.getByRole('button', { name: '收起播放器', exact: true }).click();
+  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
   await expect(page.locator('.rally-card')).toHaveCount(3);
 });
 
