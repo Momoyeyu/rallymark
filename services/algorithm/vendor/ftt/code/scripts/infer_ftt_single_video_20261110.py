@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Modified for RallyMark from yubodata/ftt-dual-adapter-tad-ocr-15raw to
+# support configurable weight paths, decoder reuse, and ordered prefetch.
 """Run the final FTT two-level checkpoint on one unannotated original video."""
 
 from __future__ import annotations

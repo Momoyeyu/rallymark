@@ -1,10 +1,12 @@
 # RallyMark
 
-RallyMark identifies rallies in table-tennis match videos and lets viewers jump between them while playing the original video. The public interface prioritizes mobile screens and requires no login.
+RallyMark identifies rallies in table-tennis match videos and lets viewers jump between them while playing the original video. The mobile-first interface supports guests and optional accounts.
+
+The [RallyMark ModelScope release](https://www.modelscope.ai/models/momoyeyu/rallymark) provides the weights used by GPU deployments. The inference pipeline builds on [yubodata's FTT dual-adapter TAD and scoreboard OCR release](https://www.modelscope.ai/models/yubodata/ftt-dual-adapter-tad-ocr-15raw). The [Apache License 2.0](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and [algorithm provenance](services/algorithm/vendor/PROVENANCE.md) describe attribution, modifications and component licenses.
 
 ## First release
 
-Upload an MP4/MOV video using H.264 or HEVC, up to 500 MB and 15 minutes. Local format and size checks run before transfer; necessary media preparation runs in the business service before analysis. Then review rally markers. Previous/next buttons seek and play in one action. Automatic skipping is enabled by default, pauses after the final rally, and turns off when the viewer manually scrubs. The same browser retains anonymous history for seven days.
+Upload an MP4/MOV video using H.264 or HEVC, up to 500 MB and 15 minutes. Local format and size checks run before transfer. The business service handles any required media preparation before analysis. Previous and next buttons seek and play in one action. Automatic skipping is enabled by default, pauses after the final rally, and turns off when the viewer manually scrubs. Guests can keep up to five videos while their session is active. Signing in saves the current guest session's accessible videos to the account for cross-device review.
 
 TAD is the primary detector. Scoreboard OCR assists boundaries where the supported broadcast layout is recognized; other layouts receive a TAD-only result with a warning. Algorithm parameters live in deployment YAML, not user-facing controls. Experimental tuning continues in the independent FTT demo repository.
 
@@ -24,7 +26,7 @@ make check
 make test
 ~~~
 
-The development Compose stack uses a fake algorithm runner. It requires Docker Compose 2.24.4 or newer. Run make help for commands. Choose the SSH deployment target in .runtime/target.env and the target's GPU and paths in its .runtime/deploy.env. Use make deploy VERSION=<commit-sha> to build and deploy on that host. Follow [operations](docs/operations.md) for setup, migration, cleanup, backup and rollback.
+The development Compose stack uses a fake algorithm runner. It requires Docker Compose 2.24.4 or newer. Run `make help` for commands. Choose the SSH deployment target in `.runtime/target.env` and the target's GPU and paths in its `.runtime/deploy.env`. Use `make deploy VERSION=<commit-sha>` to build and deploy on that host. A GPU deployment verifies local weights and fetches missing files from the pinned ModelScope release. Run `make weights` to prepare them ahead of time. Follow [operations](docs/operations.md) for setup, migration, cleanup, backup and rollback.
 
 For playback with existing original videos and analysis JSON, use [local review](apps/web/LOCAL_REVIEW.md). Only the web application runs; no API or GPU is required. [Offline evaluation](scripts/experiments/README.md) documents reproducible parameter searches.
 
@@ -45,12 +47,12 @@ The [six-match parameter experiment](docs/20261113-001/report.md) records recall
 | deploy | Docker images, Compose and configuration |
 | scripts | Shared development and operator commands |
 
-See [architecture](docs/architecture.md) for service and persistence boundaries. [AGENTS.md](AGENTS.md) summarizes repository conventions. GitLab is the primary internal repository; GitHub is a private auxiliary remote. The default branch is master.
+See [architecture](docs/architecture.md) for service and persistence boundaries. [AGENTS.md](AGENTS.md) summarizes repository conventions. GitHub is the public source repository. Internal development and CI use GitLab.
 
 ## Product routes
 
 - `/` — product homepage
-- `/app` — anonymous upload, analysis and history
+- `/app` — upload, analysis, video history and optional account settings
 - `/preview` — six read-only matches, independent of algorithm availability
 - `/admin` — authenticated video, storage and user management; no public navigation entry
 

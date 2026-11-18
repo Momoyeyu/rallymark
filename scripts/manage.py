@@ -16,6 +16,8 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from model_assets import prepare_weights
+
 RUNTIME = ROOT / ".runtime"
 ENV = ROOT / (os.environ.get("ENV_FILE") or ".runtime/deploy.env")
 
@@ -164,7 +166,7 @@ def setup():
     print(
         "Created",
         ENV,
-        "with unique credentials. Set REGISTRY and WEIGHTS_PATH before deploying.",
+        "with unique credentials. Review the deployment settings before starting.",
     )
 
 
@@ -237,6 +239,8 @@ def deploy(version, *, build=False, pull=False):
     compose("config", "--quiet")
     if os.environ.get("GPU_MODE", "enabled") != "disabled":
         gpu_preflight(require_free=False)
+        if os.environ.get("RALLYMARK_MODE") != "dev":
+            prepare_weights(ROOT)
     else:
         print("Deploying with analysis disabled; business and media remain available")
     if build:
@@ -422,7 +426,7 @@ def main():
     action = sys.argv[1] if len(sys.argv) > 1 else "help"
     if action == "help":
         print(
-            "setup dev check test build deploy rollback status logs doctor config-edit config-check config-apply data-clean smoke smoke-gpu backup restore sync gpu-config storage-migrate preview-export preview-build"
+            "setup dev check test weights build deploy rollback status logs doctor config-edit config-check config-apply data-clean smoke smoke-gpu backup restore sync gpu-config storage-migrate preview-export preview-build"
         )
         print(
             "deploy/rollback VERSION=tag; logs SERVICE=api; data-clean [VIDEO_ID=id] [APPLY=1]; restore BACKUP=directory"
@@ -449,6 +453,8 @@ def main():
         os.environ["RALLYMARK_MODE"] = "dev"
         os.environ["VERSION"] = "local"
         deploy("local", build=True)
+    elif action == "weights":
+        prepare_weights(ROOT)
     elif action == "build":
         os.environ["VERSION"] = (
             requested_version or run(["git", "rev-parse", "HEAD"], capture=True).strip()

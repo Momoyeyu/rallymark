@@ -1,4 +1,6 @@
+import hashlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -27,12 +29,78 @@ class OpsReview(unittest.TestCase):
                 patch.object(ops, "version_directory", return_value=Path(directory)),
                 patch.object(ops, "compose"),
                 patch.object(ops, "gpu_preflight") as gpu,
+                patch.object(ops, "prepare_weights") as prepare,
                 patch.object(ops, "drain"),
                 patch.object(ops, "migrate"),
                 patch.object(ops, "business"),
             ):
                 ops.deploy("maintenance", build=True)
                 gpu.assert_not_called()
+                prepare.assert_not_called()
+
+    def test_missing_weights_are_prepared_before_draining(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(ops, "version_directory", return_value=Path(directory)),
+            patch.object(ops, "compose"),
+            patch.object(ops, "gpu_preflight"),
+            patch.object(ops, "prepare_weights", side_effect=RuntimeError("download failed")) as prepare,
+            patch.object(ops, "drain") as drain,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "download failed"):
+                ops.deploy("v2", build=True)
+            prepare.assert_called_once_with(ops.ROOT)
+            drain.assert_not_called()
+
+    def test_prepare_weights_downloads_only_missing_weights(self):
+        from model_assets import MANIFEST, prepare_weights
+
+        payload = b"verified model bytes"
+        expected = {"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            weights = root / "cache"
+            weights.mkdir()
+            (weights / "present.pt").write_bytes(payload)
+            manifest = root / MANIFEST
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({
+                "weights/present.pt": expected,
+                "weights/missing.pth": expected,
+                "ocr/models/optional.onnx": expected,
+            }))
+            with (
+                patch.dict(os.environ, {"WEIGHTS_PATH": "../cache"}, clear=True),
+                patch("model_assets.urlopen", return_value=io.BytesIO(payload)) as download,
+            ):
+                prepare_weights(root)
+                prepare_weights(root)
+            download.assert_called_once_with(
+                "https://www.modelscope.ai/models/momoyeyu/rallymark/resolve/ftt-weights-v1/weights/missing.pth",
+                timeout=60,
+            )
+            self.assertEqual((weights / "missing.pth").read_bytes(), payload)
+            self.assertEqual(sorted(p.name for p in weights.iterdir()), ["missing.pth", "present.pt"])
+
+    def test_prepare_weights_does_not_publish_a_corrupt_download(self):
+        from model_assets import MANIFEST, prepare_weights
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            weights = root / "cache"
+            manifest = root / MANIFEST
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({
+                "weights/missing.pth": {"bytes": 4, "sha256": hashlib.sha256(b"good").hexdigest()},
+            }))
+            with (
+                patch.dict(os.environ, {"WEIGHTS_PATH": str(weights)}, clear=True),
+                patch("model_assets.urlopen", return_value=io.BytesIO(b"bad!")),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "checksum mismatch"):
+                    prepare_weights(root)
+            self.assertEqual(list(weights.iterdir()), [])
 
     def test_disabled_compose_has_no_development_override(self):
         with (
@@ -123,8 +191,10 @@ class OpsReview(unittest.TestCase):
                 patch.object(ops, "drain"),
                 patch.object(ops, "migrate"),
                 patch.object(ops, "business"),
+                patch.object(ops, "prepare_weights") as prepare,
             ):
                 ops.deploy("local", build=True)
+                prepare.assert_not_called()
             self.assertEqual(
                 (runtime / "current-version").read_text(), "production-v1\n"
             )
@@ -280,6 +350,7 @@ class GpuPreflight(unittest.TestCase):
                 ops, "run", return_value="RTX 4080, GPU-example, 16376, 4096\n"
             ),
             patch.object(ops, "compose", return_value=""),
+            patch.object(ops, "prepare_weights"),
             patch.object(ops, "drain") as drain,
             patch.object(ops, "migrate"),
             patch.object(ops, "business"),

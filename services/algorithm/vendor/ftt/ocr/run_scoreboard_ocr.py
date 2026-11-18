@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Modified for RallyMark from yubodata/ftt-dual-adapter-tad-ocr-15raw to
+# add score-transition rules, layout options, and OCR provider selection.
 """Scoreboard-only rally baseline for 15_raw.MP4.
 
 This script never reads the rally ground truth. It uses the broadcast score
