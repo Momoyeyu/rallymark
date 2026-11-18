@@ -50,7 +50,7 @@ def claim_job(session, worker_id, lease_seconds, max_attempts):
     job = (
         session.query(Job)
         .filter(Job.status == "queued")
-        .order_by(Job.created_at)
+        .order_by(Job.created_at, Job.id)
         .with_for_update(skip_locked=True)
         .first()
     )

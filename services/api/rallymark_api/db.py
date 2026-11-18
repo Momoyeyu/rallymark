@@ -97,6 +97,7 @@ class Analysis(Base):
     video_id: Mapped[str] = mapped_column(ForeignKey("business.videos.id"), index=True)
     status: Mapped[str] = mapped_column(String(24), default="queued", index=True)
     progress: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    queue: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     rallies: Mapped[list] = mapped_column(JSON, default=list)
     warnings: Mapped[list] = mapped_column(JSON, default=list)
     error: Mapped[dict | None] = mapped_column(JSON, nullable=True)

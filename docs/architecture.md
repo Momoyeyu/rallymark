@@ -59,6 +59,12 @@ constant. Device loss or malformed telemetry prevents new claims. Saturation
 keeps jobs queued without consuming attempts. Each running attempt keeps its own
 renewable job lease and UUID reservation; an OOM consumes a bounded retry.
 
+The analysis response exposes the algorithm queue snapshot while a task is
+queued. `ahead` counts earlier queued jobs in claim order, excluding jobs already
+running. `waiting_for_capacity` reports that no compatible worker currently
+advertises an eligible slot. The browser refreshes the selected task and shows its
+position and wait reason without estimating a start time or exposing GPU details.
+
 TAD shards receive contiguous subsets of the *original global* windows, preserving
 overlap context and original timestamps. Raw predictions are collected in global
 order, then NMS is applied exactly once. No video is cut or re-encoded. OCR shares

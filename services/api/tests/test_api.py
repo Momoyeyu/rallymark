@@ -57,6 +57,35 @@ def test_upload_and_anonymous_isolation(context):
         assert stranger.get("/api/v1/videos").json() == {"items": []}
 
 
+def test_analysis_publishes_queue_snapshot_until_inference_starts(context):
+    import asyncio
+
+    client, _, factory, settings = context
+    video = upload(client).json()
+    job_id = video["latest_analysis"]["id"]
+    queue = {"ahead": 2, "waiting_for_capacity": True}
+
+    async def dispatch(status, **details):
+        transport = httpx.MockTransport(
+            lambda _: httpx.Response(200, json={"id": job_id, "status": status, **details})
+        )
+        async with httpx.AsyncClient(transport=transport) as remote:
+            assert await dispatch_once(factory, settings, settings.load_config(), remote)
+
+    asyncio.run(dispatch("queued", queue=queue))
+    response = client.get(f"/api/v1/videos/{video['id']}").json()["latest_analysis"]
+    assert response["queue"] == queue
+    assert response["progress"] is None
+
+    with factory.begin() as db:
+        db.get(Analysis, job_id).next_poll_at = now()
+    progress = {"completed": 2, "total": 10}
+    asyncio.run(dispatch("tad", progress=progress))
+    response = client.get(f"/api/v1/analyses/{job_id}").json()
+    assert response["queue"] is None
+    assert response["progress"] == progress
+
+
 def test_range_media_and_internal_auth(context):
     client, _, _, _ = context
     video = upload(client, body=b"0123456789").json()

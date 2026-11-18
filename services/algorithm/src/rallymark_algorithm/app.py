@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import text, tuple_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .db import database
@@ -54,6 +54,35 @@ def create_app(settings=None, sessions=None):
         if authorization is None or not hmac.compare_digest(authorization, expected):
             raise HTTPException(401, "Invalid service credentials")
 
+    def worker_capacity(session):
+        workers = (
+            session.query(WorkerStatus)
+            .filter(
+                WorkerStatus.heartbeat_at > utcnow() - timedelta(seconds=settings.algorithm.lease_seconds),
+                WorkerStatus.gpu_ready.is_(True),
+                WorkerStatus.version == settings.algorithm.version,
+            )
+            .all()
+        )
+        return bool(workers), sum(
+            (worker.capacity or {"available": 1}).get("available", 0) for worker in workers
+        )
+
+    def status_view(session, job):
+        result = job_view(job)
+        if job.status == "queued":
+            ahead = (
+                session.query(Job)
+                .filter(
+                    Job.status == "queued",
+                    tuple_(Job.created_at, Job.id) < (job.created_at, job.id),
+                )
+                .count()
+            )
+            _, available = worker_capacity(session)
+            result["queue"] = {"ahead": ahead, "waiting_for_capacity": available == 0}
+        return result
+
     @app.middleware("http")
     async def record_request(request, call_next):
         request_id = str(uuid.uuid4())
@@ -83,21 +112,13 @@ def create_app(settings=None, sessions=None):
     @app.get("/internal/v1/capacity", dependencies=[Depends(authorize)])
     def capacity():
         with sessions() as session:
-            workers = (
-                session.query(WorkerStatus)
-                .filter(
-                    WorkerStatus.heartbeat_at
-                    > utcnow() - timedelta(seconds=settings.algorithm.lease_seconds),
-                    WorkerStatus.gpu_ready.is_(True),
-                    WorkerStatus.version == settings.algorithm.version,
-                )
-                .all()
-            )
+            has_workers, available = worker_capacity(session)
             queued = session.query(Job).filter(Job.status == "queued").count()
             active = session.query(Job).filter(Job.status.in_(ACTIVE)).count()
-        available = sum((worker.capacity or {"available": 1}).get("available", 0) for worker in workers)
         return {
-            "state": ("busy" if active or queued or not available else "ready") if workers else "unavailable",
+            "state": ("busy" if active or queued or not available else "ready")
+            if has_workers
+            else "unavailable",
             "queued": queued,
         }
 
@@ -128,7 +149,7 @@ def create_app(settings=None, sessions=None):
                     job = session.get(Job, str(payload.id))
             if any(getattr(job, key) != value for key, value in identity.items()):
                 raise HTTPException(409, "Job ID already belongs to another request")
-            return job_view(job)
+            return status_view(session, job)
 
     @app.get("/internal/v1/jobs/{job_id}", dependencies=[Depends(authorize)])
     def get_job(job_id: UUID):
@@ -136,6 +157,6 @@ def create_app(settings=None, sessions=None):
             job = session.get(Job, str(job_id))
             if job is None:
                 raise HTTPException(404, "Job not found")
-            return job_view(job)
+            return status_view(session, job)
 
     return app

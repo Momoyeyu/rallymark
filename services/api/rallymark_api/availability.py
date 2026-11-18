@@ -1,6 +1,12 @@
 """Internal capacity checks; only stable public states cross the API boundary."""
 
 import httpx
+from pydantic import BaseModel, Field
+
+
+class QueueInfo(BaseModel):
+    ahead: int = Field(ge=0)
+    waiting_for_capacity: bool
 
 
 class CapacityUnavailable(Exception):

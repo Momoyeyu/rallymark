@@ -557,6 +557,7 @@ export interface components {
             /** Status */
             status: string;
             progress: components["schemas"]["Progress"] | null;
+            queue?: components["schemas"]["QueueInfo"] | null;
             /** Rallies */
             rallies: components["schemas"]["Rally"][];
             /** Warnings */
@@ -666,6 +667,13 @@ export interface components {
             completed: number;
             /** Total */
             total: number;
+        };
+        /** QueueInfo */
+        QueueInfo: {
+            /** Ahead */
+            ahead: number;
+            /** Waiting For Capacity */
+            waiting_for_capacity: boolean;
         };
         /** Quota */
         Quota: {

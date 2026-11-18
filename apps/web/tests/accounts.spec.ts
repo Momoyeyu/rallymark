@@ -22,6 +22,12 @@ test('guest upload dialog dismisses outside, opens the picker and offers login w
   });
   await page.setViewportSize({ width: 320, height: 740 });
   await page.goto('/app');
+  const beta = page.getByRole('button', { name: 'Beta 内测说明' });
+  await beta.hover();
+  await expect(page.getByRole('tooltip')).toContainText('刷新网页');
+  await page.mouse.move(8, 110);
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   const upload = page.getByRole('button', { name: '选择视频', exact: true });
   const dialog = page.getByRole('dialog');
   await upload.press('Enter');

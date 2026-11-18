@@ -127,7 +127,7 @@ def test_task_snapshot_does_not_acquire_new_server_defaults(client):
 
 
 def test_external_gpu_saturation_queues_instead_of_becoming_unavailable(client):
-    from rallymark_algorithm.models import WorkerStatus, utcnow
+    from rallymark_algorithm.models import Job, WorkerStatus, utcnow
 
     headers = {"Authorization": "Bearer test-service-token"}
     with client.app.state.sessions.begin() as session:
@@ -141,9 +141,18 @@ def test_external_gpu_saturation_queues_instead_of_becoming_unavailable(client):
             )
         )
     assert client.get("/internal/v1/capacity", headers=headers).json() == {"state": "busy", "queued": 0}
-    response = client.post("/internal/v1/jobs", json=payload(), headers=headers)
-    assert response.status_code == 200
-    assert response.json()["attempt"] == 0
+    first = client.post("/internal/v1/jobs", json=payload(), headers=headers).json()
+    second = client.post("/internal/v1/jobs", json=payload(), headers=headers).json()
+    assert first["attempt"] == second["attempt"] == 0
+    assert first["queue"] == {"ahead": 0, "waiting_for_capacity": True}
+    assert second["queue"] == {"ahead": 1, "waiting_for_capacity": True}
+    with client.app.state.sessions.begin() as session:
+        session.get(Job, first["id"]).status = "tad"
+    first, second = (
+        client.get(f"/internal/v1/jobs/{job['id']}", headers=headers).json() for job in (first, second)
+    )
+    assert "queue" not in first
+    assert second["queue"] == {"ahead": 0, "waiting_for_capacity": True}
 
 
 def test_worker_health_requires_fresh_compatible_dispatcher_but_allows_busy_pool(client):

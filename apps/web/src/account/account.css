@@ -161,11 +161,3 @@
 .history-row .history-item {
   gap: 8px;
 }
-@media (max-width: 370px) {
-  .product-app .app-header {
-    gap: 4px;
-  }
-  .product-app .app-header nav {
-    gap: 0;
-  }
-}

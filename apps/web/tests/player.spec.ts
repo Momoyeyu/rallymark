@@ -573,6 +573,7 @@ test('product empty, running, failed and disconnected states share accessible co
         rallies: [],
         warnings: [],
         progress: null,
+        queue: state === 'queued' ? { ahead: 2, waiting_for_capacity: true } : null,
         error: { message: '分析中断，请重试' },
         created_at: '2026-11-13T00:00:00Z',
         config_hash: 'hash',
@@ -600,7 +601,9 @@ test('product empty, running, failed and disconnected states share accessible co
     releaseUpload();
   }
   await expect(page.getByRole('heading', { name: '等待分析', exact: true })).toBeVisible();
-  await expect(page.getByRole('progressbar', { name: '分析进行中' })).toBeVisible();
+  await expect(page.getByText('排队第 3 位')).toBeVisible();
+  await expect(page.getByText('等待可用算力，资源释放后自动开始')).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: '分析进行中' })).toHaveCount(0);
   state = 'failed';
   await page.reload();
   await expect(page.getByRole('button', { name: '重试', exact: true })).toBeEnabled();

@@ -122,6 +122,65 @@ button:active:not(:disabled) {
 .brand span span {
   color: var(--lime);
 }
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.beta-badge {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: var(--control-radius);
+  outline-offset: -3px;
+}
+.beta-badge-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid #4b6750;
+  border-radius: 7px;
+  background: var(--raised);
+  color: var(--lime);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+}
+.beta-badge-mark svg {
+  width: 12px;
+  height: 12px;
+}
+.beta-badge:hover .beta-badge-mark,
+.beta-badge:focus-visible .beta-badge-mark {
+  border-color: var(--lime);
+}
+.queue-status {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.queue-status > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--lime);
+}
+.queue-status svg {
+  width: 16px;
+  height: 16px;
+}
 .app-header nav {
   display: flex;
   gap: 8px;
@@ -1104,6 +1163,9 @@ main {
   .brand {
     font-size: 25px;
   }
+  .brand-lockup {
+    gap: 6px;
+  }
   .workspace-toolbar {
     flex-wrap: wrap;
     gap: 16px;
@@ -1138,7 +1200,42 @@ main {
     max-height: 85dvh;
   }
 }
+@media (max-width: 440px) {
+  .brand-lockup {
+    gap: 4px;
+  }
+  .brand-lockup .brand {
+    gap: 4px;
+    font-size: 19px;
+  }
+  .brand-lockup .brand > svg {
+    width: 24px;
+    height: 24px;
+  }
+  .product-app .app-header {
+    gap: 4px;
+  }
+  .product-app .app-header nav {
+    gap: 0;
+  }
+  .product-app .app-header nav .icon-button {
+    --button-size: 44px;
+  }
+}
 @media (max-width: 370px) {
+  .brand-lockup .brand {
+    font-size: 18px;
+  }
+  .brand-lockup .brand > svg {
+    width: 22px;
+    height: 22px;
+  }
+  .beta-badge-mark {
+    padding: 4px 6px;
+  }
+  .beta-badge-mark svg {
+    display: none;
+  }
   .switch-caption {
     display: none;
   }

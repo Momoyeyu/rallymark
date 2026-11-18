@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ClockCounterClockwise,
+  HourglassMedium,
   UploadSimple,
   PingPong,
   ArrowClockwise,
@@ -23,7 +24,7 @@ import { AccountForm } from './account/AccountForm';
 import type { components } from './api.generated';
 import './account/account.css';
 import { Progress } from './ui/Progress';
-import { ApiError, request, upload, track, type Video } from './api';
+import { ApiError, request, upload, track, type Analysis, type Video } from './api';
 
 const stages: Record<string, string> = {
   preparing: '准备视频',
@@ -32,6 +33,7 @@ const stages: Record<string, string> = {
   tad: '识别回合',
   ocr: '读取比分',
   postprocessing: '整理回合',
+  failed: '分析失败',
 };
 type Account = components['schemas']['Account'];
 const panelTitles = {
@@ -44,6 +46,15 @@ const panelTitles = {
   delete: '删除视频',
 };
 type Panel = keyof typeof panelTitles;
+
+function queueLabel(queue: NonNullable<Analysis['queue']>) {
+  return `排队第 ${queue.ahead + 1} 位`;
+}
+
+function historyStatus(analysis: Analysis | null) {
+  if (analysis?.status === 'queued' && analysis.queue) return queueLabel(analysis.queue);
+  return stages[analysis?.status || ''] || '正在处理';
+}
 
 async function refreshSession() {
   await request('/session', { method: 'POST' });
@@ -217,7 +228,7 @@ export default function App() {
         跳到内容
       </a>
       <header className="app-header">
-        <Brand />
+        <Brand beta />
         <nav aria-label="账户与视频">
           <IconButton
             label={account ? '账户 · ' + account : '登录或注册'}
@@ -311,7 +322,15 @@ export default function App() {
             </div>
             <h1>{stages[analysis.status] || '分析中'}</h1>
             <p className="status-title">{video.title}</p>
-            {analysis.progress && analysis.progress.total > 0 ? (
+            {analysis.status === 'queued' ? (
+              <div className="queue-status">
+                <span>
+                  <HourglassMedium aria-hidden="true" />
+                  {analysis.queue ? queueLabel(analysis.queue) : '已加入队列'}
+                </span>
+                {analysis.queue?.waiting_for_capacity && <p>等待可用算力，资源释放后自动开始</p>}
+              </div>
+            ) : analysis.progress && analysis.progress.total > 0 ? (
               <>
                 <Progress
                   label="分析进度"
@@ -513,11 +532,7 @@ export default function App() {
                     {v.latest_analysis?.status === 'succeeded' ? (
                       <CheckCircle aria-hidden="true" />
                     ) : (
-                      <span className="history-status">
-                        {v.latest_analysis?.status === 'failed'
-                          ? '分析失败'
-                          : stages[v.latest_analysis?.status || ''] || '正在处理'}
-                      </span>
+                      <span className="history-status">{historyStatus(v.latest_analysis)}</span>
                     )}
                   </button>
                   <IconButton

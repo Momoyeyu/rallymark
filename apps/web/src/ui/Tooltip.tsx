@@ -5,6 +5,7 @@ import {
   FloatingPortal,
   offset,
   shift,
+  useClick,
   useDismiss,
   useFloating,
   useFocus,
@@ -16,9 +17,11 @@ import {
 export function Tooltip({
   label,
   children,
+  tap = false,
 }: {
   label: string;
   children: ReactElement<HTMLAttributes<HTMLElement>>;
+  tap?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const { refs, floatingStyles, context } = useFloating({
@@ -28,11 +31,18 @@ export function Tooltip({
     whileElementsMounted: autoUpdate,
     middleware: [offset(8), flip({ padding: 12 }), shift({ padding: 12 })],
   });
-  const hover = useHover(context, { move: false, delay: { open: 400, close: 80 } });
+  const hover = useHover(context, { move: false, mouseOnly: tap, delay: { open: 400, close: 80 } });
+  const click = useClick(context, { enabled: tap, ignoreMouse: true });
   const focus = useFocus(context);
   const dismiss = useDismiss(context);
   const role = useRole(context, { role: 'tooltip' });
-  const { getReferenceProps, getFloatingProps } = useInteractions([hover, focus, dismiss, role]);
+  const { getReferenceProps, getFloatingProps } = useInteractions([
+    hover,
+    click,
+    focus,
+    dismiss,
+    role,
+  ]);
   return (
     <>
       {cloneElement(children, getReferenceProps({ ...children.props, ref: refs.setReference }))}

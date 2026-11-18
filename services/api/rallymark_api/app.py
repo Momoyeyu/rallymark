@@ -22,7 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .accounts import account_router, identify, require_upload_slot, visible_videos
 from .errors import ApiError
 from .admin import management_router
-from .availability import CapacityUnavailable, check_capacity
+from .availability import CapacityUnavailable, QueueInfo, check_capacity
 from .config import Settings
 from .db import ACTIVE, Analysis, Maintenance, Video, connect, now
 from .dispatcher import run_dispatcher
@@ -56,6 +56,7 @@ class AnalysisResponse(BaseModel):
     video_id: str
     status: str
     progress: Progress | None
+    queue: QueueInfo | None = None
     rallies: list[Rally]
     warnings: list[str]
     error: ErrorInfo | None
@@ -114,7 +115,10 @@ def analysis_json(item):
             "config_hash",
             "algorithm_version",
         )
-    } | {"created_at": item.created_at.isoformat()}
+    } | {
+        "created_at": item.created_at.isoformat(),
+        "queue": item.queue if item.status == "queued" else None,
+    }
 
 
 def video_json(db, item):

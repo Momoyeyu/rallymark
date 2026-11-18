@@ -2,13 +2,14 @@ import asyncio
 import logging
 import re
 import time
-from datetime import UTC, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 import httpx
 from sqlalchemy import or_, select
 
-from .db import ALGORITHM_ACTIVE, Analysis, Video, now
+from .availability import QueueInfo
+from .db import ALGORITHM_ACTIVE, Analysis, Video, as_utc, now
 
 logger = logging.getLogger("rallymark")
 
@@ -61,7 +62,7 @@ async def dispatch_once(factory, settings, config, client):
             "algorithm_version": item.algorithm_version,
         }
         duration = video.duration_s
-        created_at = (item.ready_at or item.created_at).replace(tzinfo=UTC)
+        created_at = as_utc(item.ready_at or item.created_at)
         timeout = item.config.get("timeout_seconds", 2700)
     headers = {"Authorization": "Bearer " + settings.internal_token.get_secret_value()}
     try:
@@ -85,6 +86,8 @@ async def dispatch_once(factory, settings, config, client):
             raise ValueError("Invalid algorithm status")
         result = status.get("result") or {}
         rallies = validate_result(result, duration) if status["status"] == "succeeded" else []
+        queue = status.get("queue") if status["status"] == "queued" else None
+        queue = QueueInfo.model_validate(queue).model_dump() if queue is not None else None
         with factory.begin() as db:
             item = db.get(Analysis, job_id)
             if item is None or item.lease_token != token:
@@ -93,6 +96,7 @@ async def dispatch_once(factory, settings, config, client):
             item.status = status["status"]
             item.submitted = True
             item.progress = status.get("progress")
+            item.queue = queue
             item.rallies = rallies
             item.warnings = result.get("warnings", [])
             internal_error = status.get("error")
@@ -147,6 +151,7 @@ async def dispatch_once(factory, settings, config, client):
                 item.lease_until = None
                 item.lease_token = None
                 item.next_poll_at = now() + timedelta(seconds=5)
+                item.queue = None
                 permanent = not isinstance(error, httpx.HTTPError) or (
                     isinstance(error, httpx.HTTPStatusError)
                     and error.response.status_code in (400, 401, 403, 409, 422)

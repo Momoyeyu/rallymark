@@ -1253,6 +1253,16 @@
               }
             ]
           },
+          "queue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueueInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "rallies": {
             "items": {
               "$ref": "#/components/schemas/Rally"
@@ -1607,6 +1617,25 @@
           "total"
         ],
         "title": "Progress"
+      },
+      "QueueInfo": {
+        "properties": {
+          "ahead": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Ahead"
+          },
+          "waiting_for_capacity": {
+            "type": "boolean",
+            "title": "Waiting For Capacity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ahead",
+          "waiting_for_capacity"
+        ],
+        "title": "QueueInfo"
       },
       "Quota": {
         "properties": {

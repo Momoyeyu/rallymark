@@ -100,6 +100,13 @@ def migrate(engine):
                 )
             )
             connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (4)"))
+        if 5 not in versions:
+            columns = inspect(connection).get_columns(
+                "analyses", schema="business" if prefix else None
+            )
+            if not any(column["name"] == "queue" for column in columns):
+                connection.execute(text(f"ALTER TABLE {prefix}analyses ADD COLUMN queue JSON"))
+            connection.execute(text(f"INSERT INTO {prefix}schema_versions VALUES (5)"))
 
 
 def main():
