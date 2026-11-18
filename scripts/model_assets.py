@@ -53,9 +53,9 @@ def prepare_weights(root):
     try:
         directory.mkdir(parents=True, exist_ok=True)
         for name, expected in manifest.items():
-            category, filename = name.split("/", 1)
-            if category != "weights":
+            if not name.startswith("weights/"):
                 continue
+            filename = name.split("/", 1)[1]
             destination = directory / filename
             if destination.exists():
                 verify_weight(destination, expected)

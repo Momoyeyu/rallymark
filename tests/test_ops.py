@@ -69,6 +69,7 @@ class OpsReview(unittest.TestCase):
                 "weights/present.pt": expected,
                 "weights/missing.pth": expected,
                 "ocr/models/optional.onnx": expected,
+                "source_code_and_ocr.tar.gz": expected,
             }))
             with (
                 patch.dict(os.environ, {"WEIGHTS_PATH": "../cache"}, clear=True),
